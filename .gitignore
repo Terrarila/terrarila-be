@@ -1,0 +1,34 @@
+node_modules/
+dist/
+.test-dist/
+.env
+.env.*
+!.env.example
+coverage/
+.vercel/
+
+# Local caches, logs and test reports
+.cache/
+.eslintcache
+*.tsbuildinfo
+*.log
+test-results/
+playwright-report/
+
+# Local credentials and database backups
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

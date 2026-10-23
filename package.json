@@ -1,0 +1,55 @@
+{
+  "name": "terrarila-be",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "npm run build && concurrently -k \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node --env-file-if-exists=.env --watch dist/main.js\"",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/main.js",
+    "lint": "eslint src scripts test",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "tsc -p tsconfig.test.json && node --test --test-concurrency=1 .test-dist/test/*.test.js",
+    "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "db:seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "admin:grant": "tsx --env-file-if-exists=.env scripts/admin-grant.ts",
+    "format": "prettier --write \"{src,scripts,test}/**/*.{ts,json}\" \"*.{json,mjs,yaml}\"",
+    "format:check": "prettier --check \"{src,scripts,test}/**/*.{ts,json}\" \"*.{json,mjs,yaml}\"",
+    "auth:cleanup": "tsx --env-file-if-exists=.env scripts/auth-cleanup.ts",
+    "docs:demo": "tsc -p tsconfig.test.json && TERRALA_EPHEMERAL_UI=true node .test-dist/test/ui-server.js",
+    "db:sync-catalog": "tsx --env-file-if-exists=.env scripts/seed.ts --sync-display"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.2.0",
+    "@nestjs/core": "12.2.0",
+    "@nestjs/platform-express": "12.2.0",
+    "@nestjs/swagger": "12.0.2",
+    "@vercel/functions": "3.10.1",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "helmet": "8.3.0",
+    "jose": "6.2.12",
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@eslint/js": "10.0.1",
+    "@nestjs/testing": "12.2.0",
+    "@types/express": "5.0.6",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "concurrently": "10.0.6",
+    "eslint": "10.13.0",
+    "prettier": "3.9.10",
+    "supertest": "7.3.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2"
+  }
+}

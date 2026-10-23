@@ -1,0 +1,19 @@
+import 'reflect-metadata';
+import { loadConfig } from '../src/common/config.js';
+import { createPool } from '../src/database/database.service.js';
+
+const pool = createPool({ ...loadConfig(), poolMax: 1 });
+try {
+  for (const table of ['auth_challenges', 'sessions'] as const) {
+    // Closed table allowlist; bounded batches avoid an unbounded maintenance transaction.
+    const result = await pool.query(
+      `DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table}
+       WHERE expires_at < now() - interval '1 day'
+       ${table === 'sessions' ? "OR revoked_at < now() - interval '1 day'" : ''}
+       ORDER BY expires_at LIMIT 5000) RETURNING id`,
+    );
+    console.log(`${table}: removed ${result.rowCount} expired records`);
+  }
+} finally {
+  await pool.end();
+}

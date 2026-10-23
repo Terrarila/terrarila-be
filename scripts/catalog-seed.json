@@ -1,0 +1,225 @@
+[
+  {
+    "code": "glass",
+    "name": "Chọn bể kính",
+    "description": "Một chiếc bể để bắt đầu câu chuyện của bạn.",
+    "selectionMode": "single",
+    "minSelections": 1,
+    "maxSelections": 1,
+    "sortOrder": 0,
+    "materials": [
+      {
+        "legacyId": "vertical-rectangle",
+        "slug": "glass-vertical-rectangle",
+        "name": "Bể chữ nhật đứng",
+        "description": "Dáng đứng · bố cục nhiều tầng",
+        "imageUrl": "/assets/materials/vertical-rectangle.svg",
+        "sortOrder": 0
+      },
+      {
+        "legacyId": "cubic-square",
+        "slug": "glass-cubic-square",
+        "name": "Bể vuông",
+        "description": "Dáng khối vuông · gọn gàng, cân đối",
+        "imageUrl": "/assets/materials/cubic-square.png",
+        "sortOrder": 1
+      },
+      {
+        "legacyId": "horizontal-retangle",
+        "slug": "glass-horizontal-retangle",
+        "name": "Bể chữ nhật ngang",
+        "description": "Dáng nằm ngang · rộng chỗ sắp đặt",
+        "imageUrl": "/assets/materials/horizontal-retangle.png",
+        "sortOrder": 2
+      }
+    ]
+  },
+  {
+    "code": "gravel",
+    "name": "Chọn sỏi",
+    "description": "Chọn một hoặc cả hai loại sỏi. Bấm lại để bỏ lựa chọn.",
+    "selectionMode": "multiple",
+    "minSelections": 0,
+    "maxSelections": null,
+    "sortOrder": 1,
+    "materials": [
+      {
+        "legacyId": "natural",
+        "slug": "gravel-natural",
+        "name": "Sỏi tự nhiên",
+        "description": "Sỏi sáng màu",
+        "imageUrl": "/assets/materials/rock/soi-trang.png",
+        "sortOrder": 0
+      },
+      {
+        "legacyId": "dark",
+        "slug": "gravel-dark",
+        "name": "Sỏi tối màu",
+        "description": "Sỏi đen",
+        "imageUrl": "/assets/materials/rock/soi-den.png",
+        "sortOrder": 1
+      }
+    ]
+  },
+  {
+    "code": "soil",
+    "name": "Chọn đất",
+    "description": "Chọn đất trồng, đất kết dính hoặc cả hai theo bố cục bạn muốn làm.",
+    "selectionMode": "multiple",
+    "minSelections": 0,
+    "maxSelections": null,
+    "sortOrder": 2,
+    "materials": [
+      {
+        "legacyId": "potting",
+        "slug": "soil-potting",
+        "name": "Đất nền",
+        "description": "Lớp nền dành cho cây",
+        "imageUrl": "/assets/materials/dat-nen.png",
+        "sortOrder": 0
+      },
+      {
+        "legacyId": "binding",
+        "slug": "soil-binding",
+        "name": "Đất kết dính",
+        "description": "Đất dùng để tạo hình và giữ bố cục",
+        "imageUrl": "/assets/materials/dat-ket-dinh.png",
+        "sortOrder": 1
+      }
+    ]
+  },
+  {
+    "code": "moss",
+    "name": "Chọn rêu",
+    "description": "Chọn tối đa 3 loại rêu. Bỏ một lựa chọn để đổi sang loại khác.",
+    "selectionMode": "multiple",
+    "minSelections": 0,
+    "maxSelections": 3,
+    "sortOrder": 3,
+    "materials": [
+      {
+        "legacyId": "cushion",
+        "slug": "moss-cushion",
+        "name": "Rêu Cushion",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/cushion-moss.png",
+        "sortOrder": 0
+      },
+      {
+        "legacyId": "quyenba",
+        "slug": "moss-quyenba",
+        "name": "Rêu Quyển Bá",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/quyenba-moss.png",
+        "sortOrder": 1
+      },
+      {
+        "legacyId": "co-may",
+        "slug": "moss-co-may",
+        "name": "Rêu Cỏ Mây",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/reu-co-may.png",
+        "sortOrder": 2
+      },
+      {
+        "legacyId": "co",
+        "slug": "moss-co",
+        "name": "Rêu Cỏ",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/reu-co.png",
+        "sortOrder": 3
+      },
+      {
+        "legacyId": "xa-huong",
+        "slug": "moss-xa-huong",
+        "name": "Rêu Xạ Hương",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/reu-xa-huong.png",
+        "sortOrder": 4
+      },
+      {
+        "legacyId": "thuidium",
+        "slug": "moss-thuidium",
+        "name": "Rêu Thuidium",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/thuidium-moss.png",
+        "sortOrder": 5
+      },
+      {
+        "legacyId": "wepping",
+        "slug": "moss-wepping",
+        "name": "Rêu Wepping",
+        "description": "",
+        "imageUrl": "/assets/materials/moss/wepping-moss.png",
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "code": "plants",
+    "name": "Chọn cây & lá",
+    "description": "Có thể chọn nhiều loại. Bấm lại để bỏ một loại cây.",
+    "selectionMode": "multiple",
+    "minSelections": 0,
+    "maxSelections": null,
+    "sortOrder": 4,
+    "materials": [
+      {
+        "legacyId": "bengonia",
+        "slug": "plants-bengonia",
+        "name": "Bengonia đỏ chấm mini",
+        "description": "",
+        "imageUrl": "/assets/materials/bengonia-docham-mini.png",
+        "sortOrder": 0
+      },
+      {
+        "legacyId": "cam-nhung",
+        "slug": "plants-cam-nhung",
+        "name": "Cẩm nhung",
+        "description": "",
+        "imageUrl": "/assets/materials/cam-nhung.png",
+        "sortOrder": 1
+      },
+      {
+        "legacyId": "fern",
+        "slug": "plants-fern",
+        "name": "Dương xỉ mini",
+        "description": "",
+        "imageUrl": "/assets/materials/duong-xi-mini.png",
+        "sortOrder": 2
+      },
+      {
+        "legacyId": "minima",
+        "slug": "plants-minima",
+        "name": "Minima",
+        "description": "",
+        "imageUrl": "/assets/materials/minima.png",
+        "sortOrder": 3
+      },
+      {
+        "legacyId": "moon-valley",
+        "slug": "plants-moon-valley",
+        "name": "Moon Valley",
+        "description": "",
+        "imageUrl": "/assets/materials/moon-valley.png",
+        "sortOrder": 4
+      },
+      {
+        "legacyId": "poliona",
+        "slug": "plants-poliona",
+        "name": "Poliona",
+        "description": "",
+        "imageUrl": "/assets/materials/peliona.png",
+        "sortOrder": 5
+      },
+      {
+        "legacyId": "quyen-ba-do",
+        "slug": "plants-quyen-ba-do",
+        "name": "Quyển bá đỏ",
+        "description": "",
+        "imageUrl": "/assets/materials/quyen-ba-do.png",
+        "sortOrder": 6
+      }
+    ]
+  }
+]

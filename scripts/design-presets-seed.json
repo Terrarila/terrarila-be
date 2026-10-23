@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "attempt-1",
+    "name": "Khu vườn đứng · Attempt 1",
+    "description": "Gợi ý bố cục dáng đứng với Cẩm nhung, Quyển bá đỏ và hai loại rêu. Bạn có thể đổi vật liệu bên dưới.",
+    "imageUrl": "/assets/products/attempt-1.jpg",
+    "isDemo": true,
+    "materialSlugs": [
+      "glass-vertical-rectangle",
+      "gravel-natural",
+      "soil-potting",
+      "soil-binding",
+      "moss-co",
+      "moss-quyenba",
+      "plants-cam-nhung",
+      "plants-quyen-ba-do"
+    ]
+  }
+]
