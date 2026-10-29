@@ -26,7 +26,7 @@ PostgreSQL phù hợp vì order, quote, material, payment có quan hệ và cầ
 
 Một Nest app với các thư mục domain, một pool/instance. SQL migration có checksum, seed idempotent. Danh sách phân trang cursor tối đa 100; index cho nội dung public và lịch sử đơn. Public catalog cache CDN ngắn 60 giây; auth/quote/order no-store và kiểm tra giá từ DB, không tin giá FE hay cache. Material/product có revision; cập nhật đồng thời yêu cầu If-Match, quote cũ bị từ chối khi giá/policy/availability thay đổi.
 
-Giá nguyên liệu/đơn vị chưa xác nhận để null và inquiry, không dựng bảng giá giả. Ba sản phẩm demo seed ở draft, không đưa giá FE thành giá bán thật. Portfolio không tự tạo các dự án không có dữ liệu. Ảnh chỉ lưu URL; seed tham chiếu tài nguyên hiện có trên FE, cần đổi asset host trước production.
+Giá nguyên liệu/đơn vị chưa xác nhận để null và inquiry, không dựng bảng giá giả. Ba sản phẩm demo seed ở draft, không đưa giá FE thành giá bán thật. Portfolio không tự tạo các dự án không có dữ liệu. Ảnh/model đã chuyển sang `storage/assets` của BE; metadata upload nằm trong `media_assets`. FE/admin proxy `/assets` đến BE; xem [MEDIA.md](MEDIA.md).
 
 ## Những phần cần chốt hoặc bổ sung trước khi bán thật
 
@@ -37,7 +37,7 @@ Giá nguyên liệu/đơn vị chưa xác nhận để null và inquiry, không 
 5. **Ship:** đã giới hạn HCM và nhận shop; phí chưa gồm trong tiền hàng/cọc. Cần luồng báo phí và khách đồng ý, thời gian giao, địa chỉ shop, lịch nhận. Hiện phí được thống nhất ngoài web, BE chưa ghi nhận phụ phí ship hay thanh toán phí ship trong sổ tiền hàng.
 6. **Hủy/hoàn tiền:** đơn đã nhận tiền bị chặn hủy để tránh mất dấu tiền. Cần chính sách hoàn cọc, ghi nhận refund, ai duyệt và xử lý hàng đang làm. Chưa có refund API.
 7. **Thông báo:** email xác nhận/cọc/trạng thái, hướng dẫn chăm cây, báo đơn cho shop chưa có provider/job. API hoàn thành không đồng nghĩa khách đã nhận thông báo.
-8. **Ảnh và nội dung:** upload ảnh vào object storage/CDN, giới hạn file, quyền quản lý; hiện admin chỉ nhập URL. Cần ảnh sản phẩm thật và nội dung storefront (Zalo/Messenger/địa chỉ/giờ mở cửa). Chưa có upload endpoint.
+8. **Ảnh và nội dung:** admin đã chọn file và upload vào filesystem BE có volume; đã kiểm tra định dạng/kích thước/quyền admin. Object storage/CDN để triển khai sau. Cần ảnh sản phẩm thật và nội dung storefront (Zalo/Messenger/địa chỉ/giờ mở cửa). Upload endpoint: `POST /v1/admin/media`.
 9. **Customer/admin UI:** Google login và BFF cookie, account/orders, form giao nhận, invoice view, admin quản lý catalog/pricing/order là bước FE tiếp theo. Username hiện là tên hiển thị Google, không phải handle duy nhất; chỉnh profile/address book/chia sẻ cấu hình lưu lâu chưa triển khai.
 10. **Vận hành:** tài khoản DB/Google/Vercel thật, backup và restore thử, WAF/rate limit, giám sát, lưu trữ/xóa thông tin khách theo chính sách của shop. Cần smoke test deployed thật trước nhận thanh toán.
 

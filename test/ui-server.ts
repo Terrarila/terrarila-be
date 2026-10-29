@@ -47,11 +47,17 @@ await sql.query(`
   WHERE singleton
 `);
 
+if (process.env.TERRALA_ADMIN_UI_PASSWORD) {
+  const { seedAdminUi } = await import('./admin-ui-fixture.js');
+  await seedAdminUi(sql, process.env.TERRALA_ADMIN_UI_PASSWORD);
+}
+
 const config = loadConfig({
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://test:test@localhost/test',
   PG_SSL: 'disable',
-  PORT: process.env.TERRALA_UI_PORT ?? '4100',
+  PORT: process.env.TERRALA_UI_PORT ?? '4000',
+  MEDIA_ROOT: process.env.MEDIA_ROOT,
 });
 const module = await Test.createTestingModule({ imports: [AppModule] })
   .overrideProvider(CONFIG)

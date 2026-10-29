@@ -6,6 +6,8 @@ dist/
 !.env.example
 coverage/
 .vercel/
+storage/assets/uploads/
+storage/assets/.incoming/
 
 # Local caches, logs and test reports
 .cache/

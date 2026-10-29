@@ -71,7 +71,10 @@ export class CatalogRepository {
   async products(query: PageQuery, kind: 'products' | 'portfolio_entries', includeDraft = false) {
     const cursor = decodeCursor(query.cursor);
     // Only a closed internal union selects this identifier; never interpolate request input.
-    const price = kind === 'products' ? ',price_vnd AS "priceVnd",availability' : '';
+    const price =
+      kind === 'products'
+        ? ',price_vnd AS "priceVnd",availability,highlight_image_url AS "highlightImageUrl"'
+        : '';
     const rows = (
       await this.db.query<{ id: string; sortOrder: number }>(
         `SELECT id,slug,name,description,images,sort_order AS "sortOrder",published,revision${price} FROM ${kind} WHERE (published OR $4)
@@ -106,7 +109,7 @@ export class CatalogRepository {
   }
   async product(slug: string) {
     const result = await this.db.query(
-      `SELECT id,slug,name,description,images,price_vnd AS "priceVnd",availability FROM products WHERE slug=$1 AND published`,
+      `SELECT id,slug,name,description,images,price_vnd AS "priceVnd",availability,highlight_image_url AS "highlightImageUrl" FROM products WHERE slug=$1 AND published`,
       [slug],
     );
     if (!result.rows[0]) throw new NotFoundException('Product not found');

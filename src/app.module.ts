@@ -1,4 +1,7 @@
 import { ConfigurationService } from './configuration/configuration.service.js';
+import { MediaController } from './media/media.controller.js';
+import { MediaService } from './media/media.service.js';
+import { ASSET_STORAGE, LocalAssetStorage } from './media/asset-storage.js';
 import { DesignRequestsService } from './requests/requests.service.js';
 import {
   DesignRequestsController,
@@ -30,6 +33,7 @@ import type { AppConfig } from './common/config.js';
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    MediaController,
     DesignRequestsController,
     AdminDesignRequestsController,
     CatalogController,
@@ -43,6 +47,8 @@ import type { AppConfig } from './common/config.js';
     PublicPricingController,
   ],
   providers: [
+    MediaService,
+    { provide: ASSET_STORAGE, useClass: LocalAssetStorage },
     ConfigurationService,
     DesignRequestsService,
     CatalogAdminService,

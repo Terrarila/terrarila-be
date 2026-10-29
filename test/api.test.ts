@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { Test } from '@nestjs/testing';
@@ -19,6 +23,7 @@ import { seedCatalog } from '../scripts/seed.js';
 
 const config = loadConfig({
   NODE_ENV: 'test',
+  MEDIA_ROOT: mkdtempSync(join(tmpdir(), 'petite-terre-media-test-')),
   DATABASE_URL: process.env.TEST_DATABASE_URL ?? 'postgresql://test:test@localhost/test',
   PG_SSL: process.env.TEST_PG_SSL ?? 'disable',
   GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
@@ -101,10 +106,11 @@ before(async () => {
 after(async () => {
   if (app) await app.close();
   if (cleanup) await cleanup();
+  await rm(config.mediaRoot, { recursive: true, force: true });
 });
 beforeEach(async () => {
   await sql.query(
-    'TRUNCATE design_requests,payments,invoices,orders,quotes,sessions,auth_challenges,users,admin_audit_log CASCADE',
+    'TRUNCATE auth_login_limits,design_requests,payments,invoices,orders,quotes,sessions,auth_challenges,users,admin_audit_log CASCADE',
   );
   await sql.query(
     `UPDATE materials SET price_vnd=NULL,unit=NULL,availability='inquiry',published=true,revision=1`,
@@ -493,6 +499,7 @@ test('admin catalog create/publish and About editing are protected; product quot
   const buyer = await login();
   await configurePricing(admin.token);
   const productInput = {
+    highlightImageUrl: '/assets/products/highlight.webp',
     slug: 'test-ready-product',
     name: 'Test ready-made product',
     images: [{ url: 'https://assets.example/product.png', alt: 'Test' }],
@@ -512,6 +519,18 @@ test('admin catalog create/publish and About editing are protected; product quot
     .expect(201);
   const publicProduct = await request(server()).get('/v1/products/test-ready-product').expect(200);
   assert.equal(publicProduct.body.priceVnd, 500000);
+  assert.equal(publicProduct.body.highlightImageUrl, productInput.highlightImageUrl);
+  const publicList = await request(server()).get('/v1/products').expect(200);
+  assert.equal(
+    publicList.body.items.find((p: { id: string }) => p.id === created.body.id).highlightImageUrl,
+    productInput.highlightImageUrl,
+  );
+  await request(server())
+    .patch(`/v1/admin/products/${created.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ highlightImageUrl: 'javascript:alert(1)' })
+    .expect(400);
   const productQuote = await request(server())
     .post('/v1/quotes')
     .auth(buyer.token, { type: 'bearer' })
@@ -523,7 +542,7 @@ test('admin catalog create/publish and About editing are protected; product quot
     .patch(`/v1/admin/products/${created.body.id}`)
     .auth(admin.token, { type: 'bearer' })
     .set('If-Match', '1')
-    .send({ name: 'Changed product' })
+    .send({ name: 'Changed product', highlightImageUrl: null })
     .expect(200);
   await request(server())
     .post('/v1/orders')
@@ -531,6 +550,8 @@ test('admin catalog create/publish and About editing are protected; product quot
     .set('Idempotency-Key', randomUUID())
     .send(orderInput(productQuote.body.id))
     .expect(409);
+  const cleared = await request(server()).get('/v1/products/test-ready-product').expect(200);
+  assert.equal(cleared.body.highlightImageUrl, null);
   const portfolio = await request(server())
     .post('/v1/admin/portfolio')
     .auth(admin.token, { type: 'bearer' })
@@ -545,7 +566,7 @@ test('admin catalog create/publish and About editing are protected; product quot
   const about = await request(server())
     .patch('/v1/admin/content/about')
     .auth(admin.token, { type: 'bearer' })
-    .send({ title: 'Updated story', eyebrow: 'Terralá', paragraphs: ['A story'] })
+    .send({ title: 'Updated story', eyebrow: 'Petite Terre', paragraphs: ['A story'] })
     .expect(200);
   assert.equal(about.body.key, 'about');
   const story = await request(server()).get('/v1/content/about').expect(200);
@@ -638,7 +659,9 @@ test('guest inquiry works without prices/login, retries are idempotent and conta
     .get(`/v1/design-requests/${created.body.id}`)
     .auth(guestToken, { type: 'bearer' })
     .expect(200);
-  const originalGlass = (await sql.query<{name:string}>('SELECT name FROM materials WHERE id=$1',[ids('glass')[0]])).rows[0]!.name;
+  const originalGlass = (
+    await sql.query<{ name: string }>('SELECT name FROM materials WHERE id=$1', [ids('glass')[0]])
+  ).rows[0]!.name;
   assert.equal(own.body.selection[0].name, originalGlass);
   assert.equal(own.body.contact, undefined);
   await request(server())
@@ -836,5 +859,200 @@ test('explicit display sync updates API catalog without duplicate IDs or changin
   assert.equal(
     preset.body.items[0].materials.find((item: { id: string }) => item.id === soil.id).name,
     'Đất nền',
+  );
+});
+
+test('local admin password login enforces role, revocation, reset and rate limits', async () => {
+  const { hashPassword, verifyPassword } = await import('../src/auth/password.js');
+  const password = 'Test-only-long-passphrase-2026';
+  const hash = await hashPassword(password);
+  assert.notEqual(hash, await hashPassword(password));
+  assert.equal(await verifyPassword(password, hash), true);
+  assert.equal(await verifyPassword('wrong password', hash), false);
+  await assert.rejects(hashPassword('short'));
+  const person = (
+    await sql.query<{ id: string }>(
+      "INSERT INTO users(email,username,role) VALUES('local-admin@example.test','Local Admin','admin') RETURNING id",
+    )
+  ).rows[0]!;
+  await sql.query('INSERT INTO admin_credentials(user_id,email,password_hash) VALUES($1,$2,$3)', [
+    person.id,
+    'local-admin@example.test',
+    hash,
+  ]);
+  const signIn = (email = 'local-admin@example.test', value = password) =>
+    request(server()).post('/v1/auth/admin/login').send({ email, password: value });
+  const result = await signIn(' LOCAL-ADMIN@EXAMPLE.TEST ').expect(200);
+  assert.equal(result.body.user.role, 'admin');
+  assert.equal('passwordHash' in result.body.user, false);
+  const stored = (
+    await sql.query<{ token_hash: string }>('SELECT token_hash FROM sessions WHERE user_id=$1', [
+      person.id,
+    ])
+  ).rows[0]!;
+  assert.notEqual(stored.token_hash, result.body.accessToken);
+  await request(server())
+    .get('/v1/admin/materials')
+    .auth(result.body.accessToken, { type: 'bearer' })
+    .expect(200);
+  await request(server())
+    .post('/v1/auth/logout')
+    .auth(result.body.accessToken, { type: 'bearer' })
+    .expect(200);
+  await request(server())
+    .get('/v1/auth/me')
+    .auth(result.body.accessToken, { type: 'bearer' })
+    .expect(401);
+  const unknown = await signIn('missing@example.test', 'bad').expect(401);
+  const wrong = await signIn(undefined, 'bad').expect(401);
+  assert.equal(unknown.body.message, wrong.body.message);
+  await sql.query("UPDATE users SET role='customer' WHERE id=$1", [person.id]);
+  await signIn().expect(401);
+  await sql.query("UPDATE users SET role='admin',active=false WHERE id=$1", [person.id]);
+  await signIn().expect(401);
+  await sql.query('UPDATE users SET active=true WHERE id=$1', [person.id]);
+  await sql.query('DELETE FROM auth_login_limits');
+  for (let n = 0; n < 5; n++) await signIn(undefined, 'bad').expect(401);
+  await signIn().expect(429);
+  await sql.query("UPDATE auth_login_limits SET window_started=now()-interval '16 minutes'");
+  const second = await signIn().expect(200);
+  const { saveAdminPassword } = await import('../src/auth/provision-admin.js');
+  const replacement = 'Replacement-test-passphrase-2026';
+  const replacementHash = await hashPassword(replacement);
+  await sql.transaction!((client) =>
+    saveAdminPassword(client, 'local-admin@example.test', replacementHash),
+  );
+  await request(server())
+    .get('/v1/auth/me')
+    .auth(second.body.accessToken, { type: 'bearer' })
+    .expect(401);
+  await signIn().expect(401);
+  await signIn(undefined, replacement).expect(200);
+
+  await sql.transaction!((client) => saveAdminPassword(client, 'new-admin@example.test', hash));
+  const local = (
+    await sql.query<{ role: string; google_sub: string | null }>(
+      "SELECT u.role,u.google_sub FROM users u JOIN admin_credentials c ON c.user_id=u.id WHERE c.email='new-admin@example.test'",
+    )
+  ).rows[0]!;
+  assert.equal(local.role, 'admin');
+  assert.equal(local.google_sub, null);
+  await sql.query('UPDATE users SET active=false WHERE id=$1', [person.id]);
+  await assert.rejects(
+    sql.transaction!((client) => saveAdminPassword(client, 'local-admin@example.test', hash)),
+    /disabled/,
+  );
+});
+
+test('admin image upload validates actual bytes, stores metadata, serves bytes and attaches to catalog', async () => {
+  const png = await sharp({ create: { width: 8, height: 6, channels: 4, background: '#89a46c80' } })
+    .png()
+    .toBuffer();
+  const admin = await login(true);
+  const customer = await login();
+  await request(server())
+    .post('/v1/admin/media')
+    .attach('file', png, { filename: 'plant.png', contentType: 'image/png' })
+    .expect(401);
+  await request(server())
+    .post('/v1/admin/media')
+    .auth(customer.token, { type: 'bearer' })
+    .attach('file', png, { filename: 'plant.png', contentType: 'image/png' })
+    .expect(403);
+  const result = await request(server())
+    .post('/v1/admin/media')
+    .auth(admin.token, { type: 'bearer' })
+    .attach('file', png, { filename: '../plant.png', contentType: 'image/png' })
+    .expect(201);
+  assert.match(result.body.url, /^\/assets\/uploads\/[a-f0-9-]{36}\.webp$/);
+  assert.equal(result.body.width, 8);
+  assert.equal(result.body.height, 6);
+  const asset = await request(server())
+    .get(result.body.url)
+    .expect(200)
+    .expect('Content-Type', /image\/webp/);
+  assert.equal(asset.headers['cross-origin-resource-policy'], 'cross-origin');
+  const pixels = await sharp(asset.body).metadata();
+  assert.equal(pixels.width, 8);
+  assert.equal(pixels.hasAlpha, true);
+  const record = (
+    await sql.query('SELECT url,original_name,mime_type,size_bytes FROM media_assets WHERE id=$1', [
+      result.body.id,
+    ])
+  ).rows[0]!;
+  assert.equal(record.url, result.body.url);
+  assert.equal(record.original_name, 'plant.png');
+  assert.equal(record.size_bytes, result.body.sizeBytes);
+  await request(server())
+    .patch(`/v1/admin/materials/${members[0]!.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ imageUrl: result.body.url })
+    .expect(200);
+  const material = (
+    await request(server()).get('/v1/materials?limit=100').expect(200)
+  ).body.items.find((row: { id: string }) => row.id === members[0]!.id);
+  assert.equal(material.imageUrl, result.body.url);
+  await request(server()).get('/assets/missing.png').expect(404);
+  await request(server()).get('/assets/.incoming/private').expect(403);
+  assert.equal(
+    (
+      await sql.query(
+        "SELECT id FROM admin_audit_log WHERE action='media.uploaded' AND entity_id=$1",
+        [result.body.id],
+      )
+    ).rows.length,
+    1,
+  );
+});
+
+test('upload rejects missing files, SVG, forged MIME, corrupt image, oversize and extra parts', async () => {
+  const admin = await login(true);
+  const upload = () =>
+    request(server()).post('/v1/admin/media').auth(admin.token, { type: 'bearer' });
+  const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#ffffff' } })
+    .png()
+    .toBuffer();
+  await upload().send({}).expect(400);
+  await upload()
+    .attach('file', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), {
+      filename: 'vector.svg',
+      contentType: 'image/svg+xml',
+    })
+    .expect(400);
+  await upload()
+    .attach('file', png, { filename: 'fake.jpg', contentType: 'image/jpeg' })
+    .expect(400);
+  await upload()
+    .attach('file', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), {
+      filename: 'bad.png',
+      contentType: 'image/png',
+    })
+    .expect(400);
+  await upload()
+    .attach('file', Buffer.alloc(10 * 1024 * 1024 + 1), {
+      filename: 'big.png',
+      contentType: 'image/png',
+    })
+    .expect(413);
+  await upload()
+    .attach('file', png, { filename: 'ok.png', contentType: 'image/png' })
+    .field('extra', 'untrusted')
+    .expect(400);
+  const large = await sharp({
+    create: { width: 12001, height: 1, channels: 3, background: '#ffffff' },
+  })
+    .png()
+    .toBuffer();
+  await upload()
+    .attach('file', large, { filename: 'wide.png', contentType: 'image/png' })
+    .expect(400);
+  assert.equal(
+    (
+      await sql.query('SELECT count(*)::int AS count FROM media_assets WHERE uploaded_by=$1', [
+        admin.userId,
+      ])
+    ).rows[0]?.count ?? 0,
+    0,
   );
 });

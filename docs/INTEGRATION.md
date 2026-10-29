@@ -103,9 +103,9 @@ Trạng thái: `awaiting_payment → confirmed` khi đủ cọc; `confirmed → 
 
 Lỗi trả `{statusCode,code,message,requestId}`; không lộ SQL/credentials/stack. 400 input hoặc field lạ; 401 session/token; 403 role; 404 tài nguyên không tồn tại hoặc không thuộc owner; 409 revision/idempotency/stale quote; 422 rule/giá vật liệu chưa hợp lệ; 503 cấu hình chưa đủ hoặc readiness DB. FE cần hiển thị lỗi/lấy lại dữ liệu, không tự giả định tạo đơn thành công khi request timeout.
 
-Admin patch catalog/content/pricing phải gửi If-Match từ revision vừa đọc; 409 thì reload và cho người quản trị xem lại. Public catalog có thể chậm tối đa cache TTL; giá checkout luôn kiểm tra DB. Auth/orders no-store; FE cũng dùng no-store cho dữ liệu tài khoản và không đưa vào cache dùng chung.
+Admin patch catalog/pricing phải gửi If-Match từ revision vừa đọc; 409 thì reload và cho người quản trị xem lại. Public catalog có thể chậm tối đa cache TTL; giá checkout luôn kiểm tra DB. Auth/orders no-store; FE cũng dùng no-store cho dữ liệu tài khoản và không đưa vào cache dùng chung.
 
-Ảnh BE trả URL, không host file. Nếu dùng Next Image với hostname CDN mới phải cấu hình remotePatterns trong FE trước. Không biến toàn landing thành Client Component chỉ để fetch catalog; giữ static/content fetching ở Server Components, tương tác builder/Google/checkout tách ở client phù hợp.
+BE host file tại `/assets` từ `MEDIA_ROOT` và trả URL tương đối. Admin upload bằng multipart `POST /v1/admin/media`, field `file`, Bearer admin; xem [MEDIA.md](MEDIA.md). FE/admin proxy `/assets` đến BE. Nếu dùng Next Image với hostname CDN mới phải cấu hình remotePatterns trong FE trước. Không biến toàn landing thành Client Component chỉ để fetch catalog; giữ static/content fetching ở Server Components, tương tác builder/Google/checkout tách ở client phù hợp.
 
 
 ## Guest design inquiries (21/10/2026)
@@ -119,3 +119,17 @@ Luồng tư vấn option 1: khách không cần Google, chưa cần giá đầy 
 - `PATCH /v1/admin/design-requests/:id`: admin bearer + `If-Match`; body `{status:'pending'|'contacted'|'closed'}`; cập nhật có audit. Đây là trạng thái tiếp nhận tư vấn, không phải xác nhận cọc.
 
 FE hiện có trang builder, receipt và quản lý yêu cầu. Google browser login và Postgres triển khai thật cần được smoke test theo môi trường. Giai đoạn này báo giá cuối cùng, phiếu xác nhận và nhận cọc vẫn trao đổi thủ công; chưa chuyển guest inquiry sang order tự động.
+
+## Admin email/mật khẩu (26/10/2026)
+
+- Chạy migration `009_admin_password.sql` trước khi dùng. Google login/customer hiện có giữ nguyên.
+- Tạo/đặt lại admin: `npm run admin:password -- <email>`; nhập ẩn mật khẩu 15..128 ký tự hai lần. Không có password mặc định hoặc đăng ký công khai. CLI thu hồi mọi session cũ; không tự mở lại account bị khóa.
+- `POST /v1/auth/admin/login` body `{email,password}`; chỉ active admin có credential local mới đăng nhập được. Response `{accessToken,tokenType:'Bearer',expiresAt,user:{id,email,username,avatarUrl,role}}`, dùng bearer với `/v1/auth/me`, `/v1/auth/logout` và API admin như cũ. Email trim/lowercase, không trim mật khẩu.
+- Sai email/mật khẩu, role hoặc account bị khóa: cùng lỗi 401. Giới hạn lưu DB: 5 lần/email/15 phút, 30 lần/socket IP/15 phút; 429 khi vượt. Không tin X-Forwarded-For. Reverse proxy cần rate limit riêng; nhiều người chung IP có thể dùng cùng bucket.
+- Password hash scrypt N=131072,r=8,p=1, salt 16 byte ngẫu nhiên. So sánh timingSafeEqual; tối đa 2 phép scrypt chạy song song/process. `auth:cleanup` dọn login-limit cũ theo batch.
+- Schema cho phép google_sub null đối với local admin; Google account vẫn được định danh bằng Google sub, không tự link theo email. CLI chỉ link credential vào đúng một active Google admin cùng email; customer không tự được nâng quyền.
+- `terrarila-admin` chỉ giữ bearer trong memory, reload cần đăng nhập lại; không persist token hoặc query chứa liên hệ khách.
+
+### Ảnh highlight sản phẩm
+
+Migration 013 thêm `products.highlight_image_url` nullable. POST/PATCH `/v1/admin/products` nhận `highlightImageUrl` (HTTPS hoặc `/assets/...`, tối đa 1024 ký tự); null để bỏ ảnh, không truyền khi PATCH thì giữ nguyên. GET public list/detail và admin list trả trường này. Gallery `images` giữ riêng; ảnh chính trên card là phần tử đầu tiên, ảnh highlight chỉ hiện khi hover bằng chuột. Admin upload cùng endpoint media hiện có. Portfolio không có trường highlight riêng.

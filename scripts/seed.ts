@@ -97,13 +97,13 @@ export async function seedCatalog(
     eyebrow: 'MỘT DỰ ÁN NHỎ, TỪ TÌNH YÊU CÂY CỎ',
     title: 'Chậm một chút. Xanh thêm một chút.',
     paragraphs: [
-      'Terralá bắt đầu từ mong muốn mang một khoảng thiên nhiên vào những không gian thường ngày. Mỗi bể là một lần sắp đặt, quan sát và chăm chút — từ lớp đất đầu tiên đến chiếc lá nhỏ nhất.',
+      'Petite Terre bắt đầu từ mong muốn mang một khoảng thiên nhiên vào những không gian thường ngày. Mỗi bể là một lần sắp đặt, quan sát và chăm chút — từ lớp đất đầu tiên đến chiếc lá nhỏ nhất.',
     ],
     imageUrl: asset('/assets/landing/botanical-story.png'),
   };
   const storefront = {
-    brand: 'terralá',
-    tagline: 'Một chiếc lá. Một thế giới nhỏ.',
+    brand: 'Petite Terre',
+    tagline: 'Terrarium Studio',
     deliveryNote: 'Hiện nhận giao trong TP. Hồ Chí Minh.',
     messengerUrl: null,
     zaloUrl: null,

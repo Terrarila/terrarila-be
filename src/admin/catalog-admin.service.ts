@@ -13,6 +13,7 @@ const fields = {
     sortOrder: 'sort_order',
   },
   products: {
+    highlightImageUrl: 'highlight_image_url',
     name: 'name',
     description: 'description',
     slug: 'slug',
@@ -83,6 +84,7 @@ export class CatalogAdminService {
       name: string;
       description?: string;
       images: object[];
+      highlightImageUrl?: string | null;
       priceVnd?: number | null;
       availability?: string;
       published?: boolean;
@@ -100,10 +102,14 @@ export class CatalogAdminService {
           input.published ?? false,
           input.sortOrder ?? 0,
         ];
-        const extra = table === 'products' ? ',price_vnd,availability' : '';
-        const placeholders = table === 'products' ? ',$7,$8' : '';
+        const extra = table === 'products' ? ',price_vnd,availability,highlight_image_url' : '';
+        const placeholders = table === 'products' ? ',$7,$8,$9' : '';
         if (table === 'products')
-          values.push(input.priceVnd ?? null, input.availability ?? 'inquiry');
+          values.push(
+            input.priceVnd ?? null,
+            input.availability ?? 'inquiry',
+            input.highlightImageUrl ?? null,
+          );
         const row = (
           await client.query(
             `INSERT INTO ${table}(slug,name,description,images,published,sort_order${extra}) VALUES($1,$2,$3,$4::jsonb,$5,$6${placeholders}) RETURNING id,revision`,

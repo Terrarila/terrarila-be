@@ -39,3 +39,19 @@
 - Concurrency test trên PGlite không thay thế stress test nhiều kết nối thực với PostgreSQL; cần chạy nhánh TEST_DATABASE_URL trong môi trường test trước go-live.
 
 Xem README để chạy DB, migrate/seed và test PostgreSQL riêng. Không xóa hoặc thay source FE/reference asset trong phạm vi này.
+
+## Admin password extension · 26/10/2026
+
+`typecheck`, `lint`, `format:check`, `build` PASS. Integration suite 21/21 PASS với PGlite, có kiểm tra password hash/salt, normalized email, role/active restrictions, generic login error, limiter, session revocation và chính logic CLI `saveAdminPassword` cho create/reset/disabled account. Giao diện admin đã gọi BE demo qua browser cho login, request status, payment deposit và catalog create. Chưa chạy migration 009 hoặc CLI trên PostgreSQL thật; không tạo tài khoản production. Xem `../terrarila-admin/VALIDATION.md` cho chi tiết kiểm tra UI và giới hạn.
+
+## Media filesystem · 28/10/2026
+
+Đã chuyển 51 file từ FE với đối chiếu SHA-256; ảnh/model ở storage/assets, docs ở reference/fe-docs không public. Typecheck/lint/build đạt; 23/23 API tests PGlite đạt, gồm upload ảnh thật và gắn vào catalog, phân quyền, định dạng/kích thước, metadata/audit và static errors. Migration 011–012 áp thành công trên PostgreSQL local; health/ready báo database ready. Ảnh gốc tải qua BE4000, FE3000 và admin3002 đều HTTP200 cùng byte. Compose volume được kiểm tra cấu hình; chưa chạy container backend hoặc triển khai object storage/Vercel.
+
+Chrome smoke test: đăng nhập tài khoản demo trong DB tạm, chọn PNG thật từ file dialog, thấy preview trả từ BE, lưu vật liệu thành công; GET catalog xác nhận imageUrl uploads và revision mới. Dữ liệu catalog thật không bị sửa bởi smoke test.
+
+## Ảnh highlight bể bán sẵn · 28/10/2026
+
+Migration 013 đã áp PostgreSQL local. BE 23/23 API tests đạt, kiểm tra tạo/đọc/xóa tham chiếu highlight, URL không hợp lệ và revision. Admin 15/15 tests đạt, gồm upload highlight riêng với gallery và gửi đúng If-Match. FE 11/11 tests đạt; typecheck/build cả ba đạt, lint BE/FE không lỗi (FE còn 3 warning unused cũ). Next 16.4.0 nhắc nâng cấp bảo mật; build hoàn tất sau retry.
+
+Chrome smoke test trên DB demo riêng: chọn PNG highlight bằng file dialog, upload và lưu thành công; public API trả đúng URL; FE hiển thị ảnh chính trước hover và ảnh có chú thích khi hover. FE thật đọc sản phẩm published từ API, không gắn ảnh hover cố định khi highlight null. Không thay ảnh hoặc giá của sản phẩm trong PostgreSQL thật.

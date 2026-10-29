@@ -90,6 +90,12 @@ export class PortfolioDto {
   sortOrder?: number;
 }
 export class ProductDto extends PortfolioDto {
+  @ApiPropertyOptional({ type: String, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  @Matches(/^(https:\/\/[^\s]+|\/assets\/[^\s]+)$/)
+  highlightImageUrl?: string | null;
   @ApiPropertyOptional({ type: Number, nullable: true })
   @ValidateIf((_object, value: unknown) => value !== undefined && value !== null)
   @IsInt()

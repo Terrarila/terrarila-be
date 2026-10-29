@@ -1,0 +1,9 @@
+node_modules
+dist
+.test-dist
+.git
+.env
+.env.*
+storage/assets/uploads
+storage/assets/.incoming
+reference

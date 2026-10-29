@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 export const CONFIG = Symbol('CONFIG');
 export type AppConfig = ReturnType<typeof loadConfig>;
 
@@ -19,6 +20,12 @@ function httpUrl(value: string, key: string, httpsOnly = false) {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const environment = env.NODE_ENV ?? 'development';
+  if (env.VERCEL)
+    throw new Error(
+      'Local media storage requires a persistent volume; configure object storage before deploying to Vercel',
+    );
+  if (env.MEDIA_STORAGE && env.MEDIA_STORAGE !== 'local')
+    throw new Error('Only MEDIA_STORAGE=local is implemented');
   if (!['development', 'test', 'production'].includes(environment))
     throw new Error('Invalid NODE_ENV');
   const databaseUrl = env.DATABASE_URL;
@@ -58,6 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('SESSION_TTL_SECONDS must be 300..604800');
   return {
     environment,
+    mediaRoot: resolve(env.MEDIA_ROOT ?? 'storage/assets'),
     databaseUrl,
     ssl: ssl as 'disable' | 'verify-full',
     poolMax,

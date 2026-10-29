@@ -1,6 +1,6 @@
-# Terralá API
+# Petite Terre API
 
-NestJS 12 + TypeScript (ESM), Node.js 24, PostgreSQL. Source nằm riêng trong `terrarila-be`; chưa sửa hoặc kết nối FE hiện tại.
+NestJS 12 + TypeScript (ESM), Node.js 24, PostgreSQL. Source nằm riêng trong `terrarila-be`; phục vụ API và tài nguyên `/assets` cho FE/admin.
 
 ## Chạy local
 
@@ -28,6 +28,7 @@ npm run dev
 | --- | --- |
 | `src/catalog`, `src/configuration` | Danh mục public, nội dung website, kiểm tra lựa chọn |
 | `src/auth`, `src/admin` | Google identity, session, phân quyền, sửa catalog và audit |
+| `src/media`, `storage/assets` | Upload ảnh admin, metadata và file công khai; cấu hình volume qua `MEDIA_ROOT` |
 | `src/orders` | Giá phía server, quote, order, phiếu đơn, ghi nhận chuyển khoản |
 | `src/database`, `src/common` | Pool, transaction, cấu hình, lỗi, phân trang |
 | `migrations` | SQL đánh số, có checksum, chỉ thêm migration mới |
@@ -60,12 +61,18 @@ npm run admin:grant -- <google-sub-cua-user-da-dang-nhap>
 
 Role không lấy từ request đăng ký hoặc email do FE gửi. Session ngẫu nhiên lưu hash trong DB, mặc định hết hạn sau một ngày, logout có thu hồi. FE nên giữ bearer trong cookie HttpOnly ở tầng BFF cùng host FE và chuyển tiếp sang BE; chưa triển khai BFF trong phạm vi này.
 
+## Lưu ảnh và model
+
+Ảnh website và GLB đã chuyển từ FE vào `storage/assets`; ảnh docs ở `reference/fe-docs` không phục vụ công khai. Admin upload file vào `storage/assets/uploads` và lưu metadata trong PostgreSQL. Xem [MEDIA.md](docs/MEDIA.md) để chạy với volume, cấu hình proxy và backup.
+
 ## Deploy Vercel
+
+**Hiện dùng filesystem có volume. Chưa có adapter object storage; cấu hình hiện tại sẽ từ chối khởi động trên Vercel để tránh lưu upload vào ổ đĩa tạm.** Cần triển khai adapter và chuyển dữ liệu trước khi thực hiện các bước dưới.
 
 Tạo project Vercel với **Root Directory `terrarila-be`**, Node.js **24.x**, framework NestJS. Vercel hỗ trợ entry `src/main.ts` trực tiếp; source dùng `app.listen`, không thêm Express catch-all hay rewrite kiểu cũ. Chưa deploy trong lần này.
 
 1. Tạo Postgres ngoài function qua Neon/Supabase hoặc dịch vụ tương đương; chọn region gần BE. Dùng URL pooler theo hướng dẫn nhà cung cấp cho `DATABASE_URL`, URL migration có thể tách qua `MIGRATION_DATABASE_URL`.
-2. Đặt `NODE_ENV=production`, `PG_SSL=verify-full`, `CORS_ORIGINS` là danh sách origin HTTPS cụ thể, `GOOGLE_CLIENT_ID`, `ASSET_BASE_URL` là FE/CDN thật. Tắt `SWAGGER_ENABLED` trên public production nếu không cần.
+2. Đặt `NODE_ENV=production`, `PG_SSL=verify-full`, `CORS_ORIGINS` là danh sách origin HTTPS cụ thể, `GOOGLE_CLIENT_ID`, `ASSET_BASE_URL` là BE/CDN phục vụ ảnh thật (hoặc để trống khi dùng proxy cùng origin). Tắt `SWAGGER_ENABLED` trên public production nếu không cần.
 3. Chạy migrate trước release bằng CI/CLI có quyền DB; seed một lần. Không lưu file upload hay DB trong filesystem function.
 4. Pool dùng lại theo warm instance; `attachDatabasePool` khi chạy trên Vercel, giới hạn mặc định 5 kết nối/instance. Đây không phải giới hạn toàn deployment: cần pooler và ngân sách kết nối phù hợp số instance.
 5. Cấu hình Vercel WAF/rate limit cho challenge/login/quote/order trước khi mở public. Chưa có distributed rate limiter trong source. Cấu hình backup, theo dõi lỗi và job dọn session theo lịch riêng.

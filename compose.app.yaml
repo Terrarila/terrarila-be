@@ -1,0 +1,19 @@
+# Optional backend service with persistent host volume. Local development, not a production TLS setup.
+services:
+  backend:
+    build: .
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://terrarila:local-dev-only@postgres:5432/terrarila
+      PG_SSL: disable
+      MEDIA_STORAGE: local
+      MEDIA_ROOT: /app/storage/assets
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:3002
+    ports:
+      - '127.0.0.1:4000:4000'
+    volumes:
+      - ./storage/assets:/app/storage/assets
+    depends_on:
+      postgres:
+        condition: service_healthy

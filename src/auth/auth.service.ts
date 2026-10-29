@@ -3,6 +3,7 @@ import {
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
+  HttpException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { isEmail } from 'class-validator';
@@ -11,6 +12,7 @@ import { CONFIG } from '../common/config.js';
 import type { AppConfig } from '../common/config.js';
 import { GOOGLE_VERIFY } from './google.js';
 import type { GoogleVerifier } from './google.js';
+import { verifyPassword } from './password.js';
 
 export type SessionUser = {
   id: string;
@@ -23,11 +25,75 @@ export const tokenHash = (token: string) => createHash('sha256').update(token).d
 
 @Injectable()
 export class AuthService {
+  private passwordChecks = 0;
   constructor(
     @Inject(DatabaseService) private readonly db: DatabaseService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(GOOGLE_VERIFY) private readonly verify: GoogleVerifier,
   ) {}
+  async passwordLogin(email: string, password: string, ip: string) {
+    const normalized = email.trim().toLowerCase();
+    const emailKey = tokenHash(`email:${normalized}`);
+    const limits = await this.db.transaction(async (client) => {
+      const results = [];
+      for (const [key, maximum] of [
+        [emailKey, 5],
+        [tokenHash(`ip:${ip}`), 30],
+      ] as const) {
+        const row = (
+          await client.query<{ attempts: number }>(
+            `INSERT INTO auth_login_limits(key_hash) VALUES($1)
+          ON CONFLICT(key_hash) DO UPDATE SET
+          attempts=CASE WHEN auth_login_limits.window_started<now()-interval '15 minutes' THEN 1 ELSE auth_login_limits.attempts+1 END,
+          window_started=CASE WHEN auth_login_limits.window_started<now()-interval '15 minutes' THEN now() ELSE auth_login_limits.window_started END
+          RETURNING attempts`,
+            [key],
+          )
+        ).rows[0]!;
+        results.push(row.attempts <= maximum);
+      }
+      return results.every(Boolean);
+    });
+    if (!limits || this.passwordChecks >= 2)
+      throw new HttpException('Too many login attempts; try again later', 429);
+    this.passwordChecks++;
+    try {
+      const credential = (
+        await this.db.query<{ userId: string; passwordHash: string }>(
+          `SELECT c.user_id AS "userId",c.password_hash AS "passwordHash" FROM admin_credentials c
+        JOIN users u ON u.id=c.user_id WHERE c.email=$1 AND u.active AND u.role='admin'`,
+          [normalized],
+        )
+      ).rows[0];
+      const valid = await verifyPassword(password, credential?.passwordHash ?? null);
+      if (!valid || !credential) throw new UnauthorizedException('Invalid email or password');
+      const accessToken = randomBytes(32).toString('base64url');
+      const expiresAt = new Date(Date.now() + this.config.sessionTtlSeconds * 1000).toISOString();
+      const user = await this.db.transaction(async (client) => {
+        // Lock the current credential so a concurrent CLI reset cannot leave an old session valid.
+        const row = (
+          await client.query<SessionUser>(
+            `SELECT u.id,u.email,u.username,u.avatar_url AS "avatarUrl",u.role FROM users u
+          JOIN admin_credentials c ON c.user_id=u.id WHERE u.id=$1 AND u.active AND u.role='admin'
+          AND c.password_hash=$2 FOR UPDATE OF u,c`,
+            [credential.userId, credential.passwordHash],
+          )
+        ).rows[0];
+        if (!row) throw new UnauthorizedException('Invalid email or password');
+        await client.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)', [
+          row.id,
+          tokenHash(accessToken),
+          expiresAt,
+        ]);
+        await client.query('UPDATE users SET last_login_at=now() WHERE id=$1', [row.id]);
+        await client.query('DELETE FROM auth_login_limits WHERE key_hash=$1', [emailKey]);
+        return row;
+      });
+      return { accessToken, tokenType: 'Bearer', expiresAt, user };
+    } finally {
+      this.passwordChecks--;
+    }
+  }
   async challenge() {
     if (!this.verify) throw new ServiceUnavailableException('Google login is not configured');
     const nonce = randomBytes(32).toString('base64url');

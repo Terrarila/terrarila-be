@@ -1,0 +1,308 @@
+[
+  {
+    "from": "terrarila-fe/public/assets/landing/botanical-story.png",
+    "to": "terrarila-be/storage/assets/landing/botanical-story.png",
+    "sha256": "5aa5458aa4f7e866fae597de44643e4032eb391576ee7f055d9dc0beb7ff1f9c",
+    "bytes": 2334873
+  },
+  {
+    "from": "terrarila-fe/public/assets/landing/brand-leaf.svg",
+    "to": "terrarila-be/storage/assets/landing/brand-leaf.svg",
+    "sha256": "811e2bef4f1cfe0c44bd78641904a058f9968826a8b0bbc76be1137e23ab6904",
+    "bytes": 246
+  },
+  {
+    "from": "terrarila-fe/public/assets/landing/terrarium-collection.png",
+    "to": "terrarila-be/storage/assets/landing/terrarium-collection.png",
+    "sha256": "d4f62538a4a75e8e18ce4459bf4b78fa4895aad01039e4374b3c3a5d089440e1",
+    "bytes": 2245335
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/bengonia-docham-mini.png",
+    "to": "terrarila-be/storage/assets/materials/bengonia-docham-mini.png",
+    "sha256": "e377b350452f6a3a74f37a05dee7db4e4ca0c23be2bec21d82b94cd57332cc8e",
+    "bytes": 2633120
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/cam-nhung.png",
+    "to": "terrarila-be/storage/assets/materials/cam-nhung.png",
+    "sha256": "7b6705239ce5901cbb3b145dcf3a61af678f287bf4e97a846754c54fe07f9a32",
+    "bytes": 2700772
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/cubic-square.png",
+    "to": "terrarila-be/storage/assets/materials/cubic-square.png",
+    "sha256": "c30eb8e1399f89bad95868147030dd0f9b9d251be01da3b21131af0878a442d6",
+    "bytes": 3307
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/dat-ket-dinh.png",
+    "to": "terrarila-be/storage/assets/materials/dat-ket-dinh.png",
+    "sha256": "4d88fe14b4b10e17e7f293e34bc2b1000574adeffc6af2c80d7dc923edc9696c",
+    "bytes": 2571892
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/dat-nen.png",
+    "to": "terrarila-be/storage/assets/materials/dat-nen.png",
+    "sha256": "e2a51f8e3c86b9f33c38ab32301e6aaab6cdc8de127e1878d0f7d044fc556228",
+    "bytes": 2653415
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/duong-xi-mini.png",
+    "to": "terrarila-be/storage/assets/materials/duong-xi-mini.png",
+    "sha256": "e371f1258cdb3538557313ceb367498e50287c661849f4b07b0f1dc363ffd35e",
+    "bytes": 2921661
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/horizontal-retangle.png",
+    "to": "terrarila-be/storage/assets/materials/horizontal-retangle.png",
+    "sha256": "4301f0934f7fba79ee3fa703ed34b5c183428881f53e8d1ff3f3c7f01737e85a",
+    "bytes": 4446
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/minima.png",
+    "to": "terrarila-be/storage/assets/materials/minima.png",
+    "sha256": "6e7310cb81d81874b2f1bc97c78b27e58511ece505a7830c5088e0663a5b9580",
+    "bytes": 2229226
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moon-valley.png",
+    "to": "terrarila-be/storage/assets/materials/moon-valley.png",
+    "sha256": "f0d6d339fd763753b5d4d836715079d2cc6eea9da672f84d4d2f398d74decb75",
+    "bytes": 2445428
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/cushion-moss.png",
+    "to": "terrarila-be/storage/assets/materials/moss/cushion-moss.png",
+    "sha256": "1254eec4a5ee0cd69f1d42deac0ad41991e692e06ad9ba76607c6a265edb9674",
+    "bytes": 2963878
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/quyenba-moss.png",
+    "to": "terrarila-be/storage/assets/materials/moss/quyenba-moss.png",
+    "sha256": "3b1aca3b57556453ed96a13a2192b4f1f6b87aad6cea54fbb06e844635da91eb",
+    "bytes": 2806644
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/reu-co-may.png",
+    "to": "terrarila-be/storage/assets/materials/moss/reu-co-may.png",
+    "sha256": "0553b771a317a3b0068764b48fda2aae7c59058833f26a8d176d34c3215f38b7",
+    "bytes": 3197769
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/reu-co.png",
+    "to": "terrarila-be/storage/assets/materials/moss/reu-co.png",
+    "sha256": "2a05752c40380749f24c8664a692146849b90c9a82d73bbd0b92c03e39695588",
+    "bytes": 3291865
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/reu-xa-huong.png",
+    "to": "terrarila-be/storage/assets/materials/moss/reu-xa-huong.png",
+    "sha256": "de5716bae0afe682872da4b2db17116ef5c78ca4e805463d67ac48a701ff3a6a",
+    "bytes": 3209888
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/thuidium-moss.png",
+    "to": "terrarila-be/storage/assets/materials/moss/thuidium-moss.png",
+    "sha256": "4dfb897474d15643b7d72a81c6b665bbf63851945377f257bb5c78f960171808",
+    "bytes": 3125276
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/moss/wepping-moss.png",
+    "to": "terrarila-be/storage/assets/materials/moss/wepping-moss.png",
+    "sha256": "bfe96d429655976d6a4e9032738b19c7fb6784da1d7b2d2de6d6f1a51611c0de",
+    "bytes": 3871114
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/peliona.png",
+    "to": "terrarila-be/storage/assets/materials/peliona.png",
+    "sha256": "94a9b0f26d7bd63d3462a41b73ca51d9de5d4d7d6aa0aabf59cc618eadacb292",
+    "bytes": 1882936
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/quyen-ba-do.png",
+    "to": "terrarila-be/storage/assets/materials/quyen-ba-do.png",
+    "sha256": "522b481f6d4da55fda1fb504e2ce3f56afbac867ca3cc049bccd57a4d7cca02c",
+    "bytes": 1577486
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/rock/soi-den.png",
+    "to": "terrarila-be/storage/assets/materials/rock/soi-den.png",
+    "sha256": "4d1979b69380f46b402515a0778528c9fa27db77f6c1f6880d07cdaa6d0335b1",
+    "bytes": 2003901
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/rock/soi-trang.png",
+    "to": "terrarila-be/storage/assets/materials/rock/soi-trang.png",
+    "sha256": "83feb03d1c222eb5055a89cefa9dcad51cdea2f209ba7cb1d0b97ee953f793eb",
+    "bytes": 2324140
+  },
+  {
+    "from": "terrarila-fe/public/assets/materials/vertical-rectangle.svg",
+    "to": "terrarila-be/storage/assets/materials/vertical-rectangle.svg",
+    "sha256": "2a1beebc0baafc378f5eb95a055bb47f52c6833e288b76b74c4b3bbddc23b003",
+    "bytes": 279
+  },
+  {
+    "from": "terrarila-fe/public/assets/preview-terra-transparent.png",
+    "to": "terrarila-be/storage/assets/preview-terra-transparent.png",
+    "sha256": "160f991cfd42f44cc1d31dcce609491e71e5ee1498b45f00545f505707fa5865",
+    "bytes": 890985
+  },
+  {
+    "from": "terrarila-fe/public/assets/preview-terra.png",
+    "to": "terrarila-be/storage/assets/preview-terra.png",
+    "sha256": "a8fe67253d5bc532b10d3ba2462f26467015421b02c8897ca9e9c44983702ae3",
+    "bytes": 1131220
+  },
+  {
+    "from": "terrarila-fe/public/assets/preview-terra1.png",
+    "to": "terrarila-be/storage/assets/preview-terra1.png",
+    "sha256": "be052d3eca25125f9a8a5b4b2d7e5eeabc5fc79f578efc5f4cccfd048b1c88c1",
+    "bytes": 2217065
+  },
+  {
+    "from": "terrarila-fe/public/assets/products/attempt-1-highlight.png",
+    "to": "terrarila-be/storage/assets/products/attempt-1-highlight.png",
+    "sha256": "ea734a793c8b4c5cec755e0d8fda6cce555dc83223f6ae36b958e36ca136959f",
+    "bytes": 2833089
+  },
+  {
+    "from": "terrarila-fe/public/assets/products/attempt-1.jpg",
+    "to": "terrarila-be/storage/assets/products/attempt-1.jpg",
+    "sha256": "9ef4174226e89968ba199892c355ced554e3f9b6af87995854e416cd4b4332fb",
+    "bytes": 1284716
+  },
+  {
+    "from": "terrarila-fe/public/assets/terrarium-current.glb",
+    "to": "terrarila-be/storage/assets/terrarium-current.glb",
+    "sha256": "ea3f0a68b83a2d9a4edd7a1d0559e058ebfe48f31d0749f319360068e5c02871",
+    "bytes": 36947092
+  },
+  {
+    "from": "terrarila-fe/docs/concept.png",
+    "to": "terrarila-be/reference/fe-docs/concept.png",
+    "sha256": "4b54cc5c969dee7b4d5687a2a519629237d660df021ea90010b9124e6eb407ca",
+    "bytes": 195426
+  },
+  {
+    "from": "terrarila-fe/docs/container-80-desktop.jpg",
+    "to": "terrarila-be/reference/fe-docs/container-80-desktop.jpg",
+    "sha256": "695d97c7090c81c16e6ef5b4c7d858dc290c90a049eebb1468dca048f758eda5",
+    "bytes": 122334
+  },
+  {
+    "from": "terrarila-fe/docs/container-80-mobile.jpg",
+    "to": "terrarila-be/reference/fe-docs/container-80-mobile.jpg",
+    "sha256": "1b45f1785f597053f6036ad03b2f39d25ea39c43a426aa0e831c621acc5cb3d8",
+    "bytes": 37110
+  },
+  {
+    "from": "terrarila-fe/docs/custom-desktop.png",
+    "to": "terrarila-be/reference/fe-docs/custom-desktop.png",
+    "sha256": "10c06c6249d8dc9d092e3f9c6116a5311f2b0a581acbe113b359682eabb71b4c",
+    "bytes": 203597
+  },
+  {
+    "from": "terrarila-fe/docs/custom-materials-desktop.png",
+    "to": "terrarila-be/reference/fe-docs/custom-materials-desktop.png",
+    "sha256": "f7155d5d801a9627c981a96df5e0ce12db63aeed00c5dc19da6c683e8e21ff6a",
+    "bytes": 194517
+  },
+  {
+    "from": "terrarila-fe/docs/custom-materials-mobile.png",
+    "to": "terrarila-be/reference/fe-docs/custom-materials-mobile.png",
+    "sha256": "992ec32055910e6703a7700f6497ad2d1e318a782c084f90a8acd4b23434d159",
+    "bytes": 63913
+  },
+  {
+    "from": "terrarila-fe/docs/custom-mobile.png",
+    "to": "terrarila-be/reference/fe-docs/custom-mobile.png",
+    "sha256": "8a47fb6386d64b6f2aaa30a307b27107f4d86ea47333bec884b21ca4c3d56435",
+    "bytes": 74884
+  },
+  {
+    "from": "terrarila-fe/docs/custom-photo-desktop.png",
+    "to": "terrarila-be/reference/fe-docs/custom-photo-desktop.png",
+    "sha256": "e5fb4e7c73518de8666dcd5e40c10b1b50ab0d1f8415e5819d6675389eb7a81f",
+    "bytes": 148876
+  },
+  {
+    "from": "terrarila-fe/docs/custom-photo-mobile.png",
+    "to": "terrarila-be/reference/fe-docs/custom-photo-mobile.png",
+    "sha256": "9f89f80b1eb94288f6c6f531480bb1dfe1de14748c3d3929d8e42f701e8fb131",
+    "bytes": 60459
+  },
+  {
+    "from": "terrarila-fe/docs/desktop-complete.png",
+    "to": "terrarila-be/reference/fe-docs/desktop-complete.png",
+    "sha256": "ad61d05f8c37680cb4c1530b4fc84ee2bb15d1ee3fdb32e71c750177ee0b4c7c",
+    "bytes": 292483
+  },
+  {
+    "from": "terrarila-fe/docs/header-desktop.png",
+    "to": "terrarila-be/reference/fe-docs/header-desktop.png",
+    "sha256": "7600519d17c219f991c9aa40a6265c9dacf9282d74df96866495142c6a404ef8",
+    "bytes": 212596
+  },
+  {
+    "from": "terrarila-fe/docs/header-mobile-drawer.png",
+    "to": "terrarila-be/reference/fe-docs/header-mobile-drawer.png",
+    "sha256": "576537efd6c1ad4b2abca05240a5f062629ef3f146b23e5a1ee899ddcf35e1c4",
+    "bytes": 21078
+  },
+  {
+    "from": "terrarila-fe/docs/landing-collection-mobile.jpg",
+    "to": "terrarila-be/reference/fe-docs/landing-collection-mobile.jpg",
+    "sha256": "87d09693a06d36cb1b2c21b6553b89294aea6e368b9019b84d96595fc4fed5f6",
+    "bytes": 38612
+  },
+  {
+    "from": "terrarila-fe/docs/landing-footer-mobile.jpg",
+    "to": "terrarila-be/reference/fe-docs/landing-footer-mobile.jpg",
+    "sha256": "f5972ab4fa5942fd69599d3f40e0af1ac6ec0ac8b21575479bde4537974eeca8",
+    "bytes": 47523
+  },
+  {
+    "from": "terrarila-fe/docs/landing-portfolio-desktop.jpg",
+    "to": "terrarila-be/reference/fe-docs/landing-portfolio-desktop.jpg",
+    "sha256": "da5295b316ce8a970c220ccaa7f52129cc83b2a4a8932506f9186a46cb8b1a0d",
+    "bytes": 132448
+  },
+  {
+    "from": "terrarila-fe/docs/landing-story-footer-desktop.jpg",
+    "to": "terrarila-be/reference/fe-docs/landing-story-footer-desktop.jpg",
+    "sha256": "d29f056782c729a27a9c0cf0a5078f6fa9dad9735d232696146aef2b37e0662a",
+    "bytes": 115034
+  },
+  {
+    "from": "terrarila-fe/docs/lightformer-glass.jpg",
+    "to": "terrarila-be/reference/fe-docs/lightformer-glass.jpg",
+    "sha256": "d367238a6e561493f7d5c509df2fecb983428e0be753a05138183c779e52dd92",
+    "bytes": 79037
+  },
+  {
+    "from": "terrarila-fe/docs/material-image-popup-desktop.png",
+    "to": "terrarila-be/reference/fe-docs/material-image-popup-desktop.png",
+    "sha256": "a12e657dedfa0e34e256a14879f7f280a881c3bad1bb027cc03e82dec22e20d3",
+    "bytes": 663984
+  },
+  {
+    "from": "terrarila-fe/docs/material-image-popup-mobile.png",
+    "to": "terrarila-be/reference/fe-docs/material-image-popup-mobile.png",
+    "sha256": "b0529f17279c4c64bc1df4d6b41e100b4c3ebf306099ad01b49dc19a56a61685",
+    "bytes": 251243
+  },
+  {
+    "from": "terrarila-fe/docs/mobile-complete.png",
+    "to": "terrarila-be/reference/fe-docs/mobile-complete.png",
+    "sha256": "4c3e0be86f5f119dd23f4109b3f1ee0b7906db05e8bb6e56a25049cfa3e22841",
+    "bytes": 93398
+  },
+  {
+    "from": "terrarila-fe/docs/mobile-small.png",
+    "to": "terrarila-be/reference/fe-docs/mobile-small.png",
+    "sha256": "ade7ea86a623026a3fd9f0c3b4e865e5e72d165955d3fd5e6fe1a1e2702e0141",
+    "bytes": 42693
+  }
+]
