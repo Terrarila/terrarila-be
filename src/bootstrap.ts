@@ -6,7 +6,9 @@ import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, static as serveStatic } from 'express';
 import type { ErrorRequestHandler } from 'express';
-import helmet from 'helmet';
+// Use Helmet's explicit CommonJS default across NodeNext and Vercel's TS loader.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import helmet = require('helmet');
 import { AuditService } from './admin/audit.service.js';
 import { ApiExceptionFilter, requestContext } from './common/http.js';
 import type { AppConfig } from './common/config.js';
@@ -14,7 +16,7 @@ import type { AppConfig } from './common/config.js';
 export async function configureApp(app: INestApplication, config: AppConfig) {
   app.use(requestContext);
   app.use(app.get(Operations).middleware(config.logRequests));
-  app.use(helmet());
+  app.use(helmet.default());
   if (config.mediaStorage === 'vercel-blob')
     app.use('/assets', assetRedirect(config.assetBaseUrl!));
   else
