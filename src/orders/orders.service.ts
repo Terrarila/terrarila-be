@@ -1,3 +1,4 @@
+import { auditChanges } from '../common/audit-context.js';
 import {
   BadRequestException,
   ConflictException,
@@ -40,6 +41,8 @@ export type QuoteSnapshot = {
     unitPriceVnd: number;
     lineTotalVnd: number;
     revision?: number;
+    parentMaterialId?: string;
+    sizeLabel?: string | null;
   }[];
   subtotalVnd: number;
   labourVnd: number;
@@ -106,6 +109,8 @@ export class OrdersService {
           throw new UnprocessableEntityException(`Selection limit for ${category.code}`);
       }
       items = materials.map((material) => {
+        if (material.category === 'glass' && material.requiresSize)
+          throw new UnprocessableEntityException('Choose a glass size before requesting a quote');
         const quantity = input.items!.find((item) => item.materialId === material.id)!.quantity;
         if (policy.quantity_mode === 'per_selection' && quantity !== 1)
           throw new BadRequestException('Each selected material must have quantity 1');
@@ -119,6 +124,9 @@ export class OrdersService {
           unitPriceVnd: material.priceVnd,
           lineTotalVnd: checkedMoney(material.priceVnd * quantity),
           revision: material.revision,
+          ...(material.parentMaterialId
+            ? { parentMaterialId: material.parentMaterialId, sizeLabel: material.sizeLabel }
+            : {}),
         };
       });
     } else {
@@ -220,6 +228,11 @@ export class OrdersService {
           throw new UnprocessableEntityException('Delivery area not supported');
         const ids = snapshot.items.map((item) => item.id);
         if (snapshot.kind === 'custom') {
+          // Lock parent shapes too, so hiding a shape cannot race an order for one of its sizes.
+          await client.query(
+            'SELECT id FROM materials WHERE id IN (SELECT parent_material_id FROM materials WHERE id=ANY($1::uuid[])) ORDER BY id FOR SHARE',
+            [ids],
+          );
           const rows = (
             await client.query<{
               id: string;
@@ -227,7 +240,8 @@ export class OrdersService {
               price_vnd: number;
               availability: string;
             }>(
-              'SELECT m.id,m.revision,m.price_vnd,m.availability FROM materials m JOIN material_categories c ON c.id=m.category_id WHERE m.id=ANY($1::uuid[]) AND m.published AND c.active ORDER BY m.id FOR SHARE OF m,c',
+              `SELECT m.id,m.revision,m.price_vnd,m.availability FROM materials m JOIN material_categories c ON c.id=m.category_id WHERE m.id=ANY($1::uuid[]) AND m.published AND c.active
+              AND (m.parent_material_id IS NULL OR EXISTS(SELECT 1 FROM materials p WHERE p.id=m.parent_material_id AND p.published AND p.availability<>'unavailable')) ORDER BY m.id FOR SHARE OF m,c`,
               [ids],
             )
           ).rows;
@@ -397,6 +411,8 @@ export class OrdersService {
   }
   async pricing(input: PricingDto, actor: string, revision: number) {
     return this.db.transaction(async (client) => {
+      const before = (await client.query('SELECT * FROM pricing_policy WHERE singleton FOR UPDATE'))
+        .rows[0];
       const result = await client.query(
         `UPDATE pricing_policy SET labour_bps=$1,deposit_bps=$2,quantity_mode=$3,shipping_mode=$4,delivery_area_codes=$5,revision=revision+1,updated_at=now() WHERE singleton AND revision=$6 RETURNING revision`,
         [
@@ -412,7 +428,7 @@ export class OrdersService {
         throw new ConflictException('Pricing revision changed; reload before editing');
       await client.query(
         `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'pricing.updated','00000000-0000-4000-8000-000000000000',$2::jsonb)`,
-        [actor, JSON.stringify(input)],
+        [actor, auditChanges(input, before)],
       );
       return result.rows[0];
     });
@@ -454,7 +470,7 @@ export class OrdersService {
         );
         await client.query(
           `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'payment.confirmed',$2,$3::jsonb)`,
-          [actor, id, JSON.stringify(input)],
+          [actor, id, auditChanges(input)],
         );
         return { recorded: true, paidVnd: paid };
       });
@@ -495,7 +511,7 @@ export class OrdersService {
       ]);
       await client.query(
         `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'order.status_changed',$2,$3::jsonb)`,
-        [actor, id, JSON.stringify(input)],
+        [actor, id, auditChanges(input)],
       );
       return { id, status: input.status };
     });

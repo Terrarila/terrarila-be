@@ -1,3 +1,4 @@
+import { auditChanges } from '../common/audit-context.js';
 import {
   BadRequestException,
   Inject,
@@ -66,7 +67,13 @@ export class MediaService {
       const id = randomUUID();
       const key = `uploads/${id}.webp`;
       const url = `/assets/${key}`;
+      const thumbnailKey = `uploads/${id}-thumb.webp`;
+      const thumbnail = await sharp(output.data)
+        .resize(160, 160, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer();
       const result = {
+        thumbnailUrl: `/assets/${thumbnailKey}`,
         id,
         url,
         mimeType: 'image/webp',
@@ -76,6 +83,7 @@ export class MediaService {
       };
       await this.storage.put(key, output.data);
       try {
+        await this.storage.put(thumbnailKey, thumbnail);
         await this.db.transaction(async (client) => {
           await client.query(
             `INSERT INTO media_assets(id,storage_provider,storage_key,url,original_name,mime_type,size_bytes,width,height,sha256,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
@@ -98,11 +106,11 @@ export class MediaService {
           );
           await client.query(
             "INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'media.uploaded',$2,$3::jsonb)",
-            [actor, id, JSON.stringify(result)],
+            [actor, id, auditChanges(result)],
           );
         });
       } catch (error) {
-        await this.storage.remove(key);
+        await Promise.all([this.storage.remove(key), this.storage.remove(thumbnailKey)]);
         throw error;
       }
       return result;

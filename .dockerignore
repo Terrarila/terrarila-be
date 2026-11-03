@@ -7,3 +7,8 @@ dist
 storage/assets/uploads
 storage/assets/.incoming
 reference
+
+backups
+ops
+*.pem
+*.ptbackup

@@ -17,7 +17,8 @@ export class LocalAssetStorage implements AssetStorage {
   readonly provider = 'local' as const;
   constructor(@Inject(CONFIG) private readonly config: AppConfig) {}
   private path(key: string) {
-    if (!/^uploads\/[a-f0-9-]{36}\.webp$/.test(key)) throw new Error('Invalid storage key');
+    if (!/^uploads\/[a-f0-9-]{36}(?:-thumb)?\.webp$/.test(key))
+      throw new Error('Invalid storage key');
     return join(this.config.mediaRoot, key);
   }
   async put(key: string, data: Buffer) {

@@ -11,7 +11,9 @@ export class HealthController {
   @Get('ready') async ready() {
     try {
       const result = await this.db.query<{ initialized: boolean }>(
-        `SELECT to_regclass('materials') IS NOT NULL AS initialized`,
+        `SELECT to_regclass('materials') IS NOT NULL
+        AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='site_content' AND column_name='revision')
+        AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass('admin_audit_log') AND tgname='admin_audit_append_only' AND tgenabled<>'D') AS initialized`,
       );
       if (!result.rows[0]?.initialized) throw new Error('Schema missing');
       return { status: 'ok', database: 'ready' };

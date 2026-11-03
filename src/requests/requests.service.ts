@@ -1,3 +1,4 @@
+import { auditChanges } from '../common/audit-context.js';
 import {
   ConflictException,
   HttpException,
@@ -70,6 +71,13 @@ export class DesignRequestsService {
         id: item.id,
         category: item.category,
         name: item.name,
+        ...(item.parentMaterialId
+          ? {
+              parentMaterialId: item.parentMaterialId,
+              sizeLabel: item.sizeLabel,
+              priceVnd: item.priceVnd,
+            }
+          : {}),
       }));
       const id = randomUUID();
       const number = `TL-${id.toUpperCase()}`;
@@ -135,7 +143,7 @@ export class DesignRequestsService {
       if (!row) throw new ConflictException('Request changed; reload before editing');
       await client.query(
         "INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'design_request.review',$2,$3::jsonb)",
-        [actor, id, JSON.stringify(input)],
+        [actor, id, auditChanges(input)],
       );
       return row;
     });

@@ -46,7 +46,7 @@ export class CatalogController {
     const items = await Promise.all(
       page.items.map(async ({ materialIds, ...preset }) => {
         try {
-          const { materials } = await this.configurations.validate({ materialIds });
+          const { materials } = await this.configurations.validate({ materialIds }, true);
           return { ...preset, materials, selectable: true };
         } catch (error) {
           if (!(

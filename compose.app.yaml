@@ -9,11 +9,13 @@ services:
       PG_SSL: disable
       MEDIA_STORAGE: local
       MEDIA_ROOT: /app/storage/assets
+      BACKUP_DIR: /app/backups
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:3002
     ports:
       - '127.0.0.1:4000:4000'
     volumes:
       - ./storage/assets:/app/storage/assets
+      - ./backups:/app/backups:ro
     depends_on:
       postgres:
         condition: service_healthy

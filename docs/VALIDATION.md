@@ -55,3 +55,28 @@ Chrome smoke test: đăng nhập tài khoản demo trong DB tạm, chọn PNG th
 Migration 013 đã áp PostgreSQL local. BE 23/23 API tests đạt, kiểm tra tạo/đọc/xóa tham chiếu highlight, URL không hợp lệ và revision. Admin 15/15 tests đạt, gồm upload highlight riêng với gallery và gửi đúng If-Match. FE 11/11 tests đạt; typecheck/build cả ba đạt, lint BE/FE không lỗi (FE còn 3 warning unused cũ). Next 16.4.0 nhắc nâng cấp bảo mật; build hoàn tất sau retry.
 
 Chrome smoke test trên DB demo riêng: chọn PNG highlight bằng file dialog, upload và lưu thành công; public API trả đúng URL; FE hiển thị ảnh chính trước hover và ảnh có chú thích khi hover. FE thật đọc sản phẩm published từ API, không gắn ảnh hover cố định khi highlight null. Không thay ảnh hoặc giá của sản phẩm trong PostgreSQL thật.
+
+## Portfolio tự động từ sản phẩm · 30/10/2026
+
+GET Portfolio kết hợp mục thủ công với bể bán sẵn published bằng truy vấn trực tiếp, không tạo bản sao hay cần migration. BE 24/24 tests đạt: bản nháp không lộ, sửa nguồn cập nhật ảnh/highlight/nội dung, bỏ xuất bản biến mất, xuất bản lại không trùng, phân trang chung và giữ mục thủ công. Admin 17/17 tests đạt, gồm nhãn nguồn/link chỉnh bể gốc, giữ editor của mục thủ công. FE 11/11 tests, typecheck và build đạt; lint FE 0 lỗi/3 warnings unused có sẵn. Next 16.4.0 vẫn nhắc nâng cấp bảo mật; build đạt sau retry.
+
+Đã rebuild/recreate backend Docker, health/ready thành công; API thật trả 1 bể published và 1 mục Portfolio đồng bộ, cùng tên/ảnh/highlight. Chrome xác nhận Khu vườn đứng hiện trong section Portfolio và dialog Xem tất cả, không kèm giá/nút mua. Kiểm thử thay đổi/bỏ xuất bản chạy trong DB test riêng; dữ liệu sản phẩm thật không bị sửa.
+
+## Size bể kính · 30/10/2026
+
+Migration 014 đã áp lên PostgreSQL local, BE Docker đã rebuild/recreate. Public API giữ 3 dáng bể, trả 9 size con với nhãn/giá đúng danh sách: đứng 150k/150k/120k, Cubic 60k/80k/100k/130k, ngang 90k/110k. ID dáng cũ/preset giữ nguyên. Chọn size gửi ID material con; request snapshot lưu size và giá, quote/order/invoice tính từ DB, không nhận giá từ FE. Không tự xác nhận các giá nguyên liệu/tồn kho khác.
+
+BE typecheck/lint/build/format đạt; 26/26 API tests đạt, gồm snapshot yêu cầu, tính quote theo size, invoice, chặn shape-only, ẩn dáng sau quote và seed giữ giá đã sửa. FE typecheck/build đạt, 14/14 tests đạt (thêm 3 test size/persist/preset); lint 0 lỗi/3 warning unused cũ. Build Next vẫn nhắc nâng cấp bảo mật phiên bản 16.4.0 và đạt sau retry.
+
+Chrome trong cửa sổ kiểm thử riêng xác nhận đúng 3/4/2 size từng dáng, chọn đứng 15×15×25–150k rồi reload vẫn giữ, đổi sang Cubic bỏ size cũ/khóa gửi, chọn ngang 20×10×10 hiển thị 110k. Không gửi yêu cầu thật trong browser. Kiểm tra giao diện qua accessibility; screenshot riêng Incognito gặp lỗi công cụ/capture sai cửa sổ, chưa đánh giá bố cục mobile/thiết bị thật.
+
+## Admin security and operations · 02/11/2026
+
+- Patched Nest common/core/platform/testing to 12.3.2, body-parser to 2.4.x through the lockfile; removed the unused Vercel adapter dependency while local volume storage is active. Admin Router is 7.18.5 and Vitest 5.0.5. Both full `npm audit` reports (including dev) show 0 vulnerabilities at this check. Lint's patched minimatch 11.0.3 is pinned via override and lint passes.
+- BE 33/33 tests passed in both PGlite and an isolated schema in real PostgreSQL 17. Coverage includes audit permissions/context/previous values, append-only protection, content conflict, compressed body rejection, metrics authorization, auth-log redaction and unpublished-content isolation. Typecheck/lint/format/build passed.
+- Encrypted dump/restore smoke passed on a fresh real PostgreSQL Docker fixture, preserving catalog/content/users/requests/orders/quotes/invoices/payments and media bytes. Restored sessions are revoked and restore audited; non-empty targets are rejected. Backup also works after moving the private key offline; public-media backup/key destinations are rejected before key creation, and canonical path checks guard against symlink aliases. Fixture containers/files are removed automatically.
+- Migration 015 applied to local shop DB only after a complete encrypted pre-migration backup. Local daily 02:30 LaunchAgent installed and kickstarted once: last exit code 0, completed a post-migration encrypted bundle. Two ~107 MB bundles exist with 0600 mode; keys are 0600 and excluded from Git/Docker. No customer-data restore was attempted. Runtime DB-role restrictions were tested only on the disposable fixture.
+- BE Docker rebuilt/recreated; `/health/ready` returns 200 with schema/audit protection present. First build encountered a transient esbuild ETXTBSY install error; a retry and subsequent cached rebuild succeeded. Volumes remain unchanged; backups mount read-only for freshness reporting.
+- Read-only Docker-local public materials probe: 200 requests, concurrency 4, 0 failures, p50 4 ms / p95 9 ms / p99 135 ms. Authenticated admin fixture probe: 200 requests, concurrency 4, 0 failures, p50 9 ms / p95 12 ms / p99 22 ms. These are local synthetic baselines, not production capacity measurements.
+- Chrome desktop fixture smoke: login, audit history/details, operations metrics/backup freshness, About save with success notification and a corresponding audit entry, logout back to sign-in. Shop content was not edited during browser QA.
+- Nginx example passed `nginx -t` in a disposable official nginx container with a temporary test certificate. No production TLS host, off-machine backup or external alert destination is enabled. See OPERATIONS.md for installation, restore and deployment boundaries.

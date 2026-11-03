@@ -53,6 +53,6 @@ export class AuthController {
   @Post('logout') @HttpCode(200) @ApiBearerAuth() @UseGuards(SessionGuard) logout(
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.auth.logout(req.sessionId);
+    return this.auth.logout(req.sessionId, req.user.id);
   }
 }

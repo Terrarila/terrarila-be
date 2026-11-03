@@ -1,0 +1,65 @@
+[
+  {
+    "parent": "vertical-rectangle",
+    "code": "25x10x18",
+    "label": "25×10×18 cm (D×R×C)",
+    "priceVnd": 150000,
+    "sortOrder": 0
+  },
+  {
+    "parent": "vertical-rectangle",
+    "code": "15x15x25",
+    "label": "15×15×25 cm (D×R×C)",
+    "priceVnd": 150000,
+    "sortOrder": 1
+  },
+  {
+    "parent": "vertical-rectangle",
+    "code": "10x10x20",
+    "label": "10×10×20 cm (D×R×C)",
+    "priceVnd": 120000,
+    "sortOrder": 2
+  },
+  {
+    "parent": "cubic-square",
+    "code": "10x10",
+    "label": "Cubic 10×10 cm",
+    "priceVnd": 60000,
+    "sortOrder": 0
+  },
+  {
+    "parent": "cubic-square",
+    "code": "12x12",
+    "label": "Cubic 12×12 cm",
+    "priceVnd": 80000,
+    "sortOrder": 1
+  },
+  {
+    "parent": "cubic-square",
+    "code": "15x15",
+    "label": "Cubic 15×15 cm",
+    "priceVnd": 100000,
+    "sortOrder": 2
+  },
+  {
+    "parent": "cubic-square",
+    "code": "20x20",
+    "label": "Cubic 20×20 cm",
+    "priceVnd": 130000,
+    "sortOrder": 3
+  },
+  {
+    "parent": "horizontal-retangle",
+    "code": "15x6x6",
+    "label": "15×6×6 cm",
+    "priceVnd": 90000,
+    "sortOrder": 0
+  },
+  {
+    "parent": "horizontal-retangle",
+    "code": "20x10x10",
+    "label": "20×10×10 cm",
+    "priceVnd": 110000,
+    "sortOrder": 1
+  }
+]

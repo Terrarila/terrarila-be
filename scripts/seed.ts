@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { pathToFileURL } from 'node:url';
 import data from './catalog-seed.json' with { type: 'json' };
 import presets from './design-presets-seed.json' with { type: 'json' };
+import glassSizes from './glass-sizes-seed.json' with { type: 'json' };
 import { loadConfig } from '../src/common/config.js';
 import { createPool } from '../src/database/database.service.js';
 import type { SqlClient } from '../src/database/database.service.js';
@@ -40,6 +41,15 @@ export async function seedCatalog(
         ],
       );
     }
+  }
+  for (const size of glassSizes) {
+    await client.query(
+      `INSERT INTO materials(category_id,legacy_id,slug,name,description,image_url,published,sort_order,price_vnd,unit,availability,parent_material_id,size_label)
+       SELECT p.category_id,p.legacy_id||'-'||$2,p.slug||'-'||$2,p.name||' · '||$3,$3,p.image_url,true,$5,$4,'bể',p.availability,p.id,$3
+       FROM materials p JOIN material_categories c ON c.id=p.category_id AND c.code='glass'
+       WHERE p.legacy_id=$1 AND p.parent_material_id IS NULL ON CONFLICT(category_id,legacy_id) DO NOTHING`,
+      [size.parent, size.code, size.label, size.priceVnd, size.sortOrder],
+    );
   }
   if (syncDisplay) {
     // Explicit one-time display sync only: keep UUIDs, prices, stock and publish flags.

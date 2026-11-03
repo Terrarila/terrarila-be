@@ -34,3 +34,10 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Encrypted backups and local key material
+backups/
+*.ptbackup
+*.ptbackup.partial
+*.private.pem
+*.public.pem

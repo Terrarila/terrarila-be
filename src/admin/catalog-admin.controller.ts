@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   Headers,
@@ -47,6 +48,7 @@ import { CatalogRepository } from '../catalog/catalog.repository.js';
 import { MaterialsQuery } from '../catalog/catalog.dto.js';
 import { PageQuery, parseRevision } from '../common/pagination.js';
 import { UpdateMaterialDto } from './admin.controller.js';
+import { auditChanges } from '../common/audit-context.js';
 import { DatabaseService } from '../database/database.service.js';
 
 export class CreateMaterialDto extends OmitType(UpdateMaterialDto, ['name'] as const) {
@@ -191,25 +193,68 @@ export class AdminCatalogController {
     key: 'about' | 'storefront',
     input: AboutDto | StorefrontDto,
     actor: string,
+    revision: number,
   ) {
     return this.db.transaction(async (client) => {
-      const row = (
-        await client.query(
-          `INSERT INTO site_content(key,data,published) VALUES($1,$2::jsonb,true) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=now() RETURNING key,updated_at AS "updatedAt"`,
-          [key, JSON.stringify(input)],
+      const previous = (
+        await client.query<{ data: unknown; revision: number }>(
+          'SELECT data,revision FROM site_content WHERE key=$1 FOR UPDATE',
+          [key],
         )
       ).rows[0];
+      if ((previous?.revision ?? 0) !== revision)
+        throw new ConflictException('Content changed; reload before editing');
+      const row = (
+        await client.query(
+          `INSERT INTO site_content(key,data,published,revision) VALUES($1,$2::jsonb,true,1)
+        ON CONFLICT(key) DO UPDATE SET data=excluded.data,published=true,revision=site_content.revision+1,updated_at=now()
+        WHERE site_content.revision=$3 RETURNING key,revision,updated_at AS "updatedAt"`,
+          [key, JSON.stringify(input), revision],
+        )
+      ).rows[0];
+      if (!row) throw new ConflictException('Content changed; reload before editing');
       await client.query(
         `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,$2,'00000000-0000-4000-8000-000000000000',$3::jsonb)`,
-        [actor, `content.${key}.updated`, JSON.stringify(input)],
+        [actor, `content.${key}.updated`, auditChanges(input, previous?.data ?? null)],
       );
       return row;
     });
   }
-  @Patch('content/about') about(@Body() input: AboutDto, @Req() req: AuthenticatedRequest) {
-    return this.content('about', input, req.user.id);
+  @Get('content/about') readAbout() {
+    return this.catalog.content('about', true);
   }
-  @Patch('storefront') storefront(@Body() input: StorefrontDto, @Req() req: AuthenticatedRequest) {
-    return this.content('storefront', input, req.user.id);
+  @Get('storefront') readStorefront() {
+    return this.catalog.content('storefront', true);
   }
+  @ApiHeader({
+    name: 'If-Match',
+    required: true,
+    description: 'Loaded content revision; 0 only when the document does not exist',
+  })
+  @Patch('content/about')
+  about(
+    @Body() input: AboutDto,
+    @Req() req: AuthenticatedRequest,
+    @Headers('if-match') revision?: string,
+  ) {
+    return this.content('about', input, req.user.id, contentRevision(revision));
+  }
+  @ApiHeader({
+    name: 'If-Match',
+    required: true,
+    description: 'Loaded content revision; 0 only when the document does not exist',
+  })
+  @Patch('storefront')
+  storefront(
+    @Body() input: StorefrontDto,
+    @Req() req: AuthenticatedRequest,
+    @Headers('if-match') revision?: string,
+  ) {
+    return this.content('storefront', input, req.user.id, contentRevision(revision));
+  }
+}
+
+// Revision zero is reserved for creating content that is genuinely absent.
+function contentRevision(value?: string) {
+  return value === '0' ? 0 : parseRevision(value);
 }

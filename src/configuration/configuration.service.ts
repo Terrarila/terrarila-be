@@ -8,7 +8,7 @@ import { CatalogRepository } from '../catalog/catalog.repository.js';
 @Injectable()
 export class ConfigurationService {
   constructor(@Inject(CatalogRepository) private readonly catalog: CatalogRepository) {}
-  async validate(input: { materialIds: string[] }) {
+  async validate(input: { materialIds: string[] }, allowShapeWithoutSize = false) {
     const [categories, materials] = await Promise.all([
       this.catalog.categories(),
       this.catalog.selectedMaterials(input.materialIds),
@@ -23,6 +23,14 @@ export class ConfigurationService {
       throw new UnprocessableEntityException({
         code: 'MATERIAL_UNAVAILABLE',
         message: 'Some materials are currently unavailable',
+      });
+    if (
+      !allowShapeWithoutSize &&
+      materials.some((item) => item.category === 'glass' && item.requiresSize)
+    )
+      throw new UnprocessableEntityException({
+        code: 'GLASS_SIZE_REQUIRED',
+        message: 'Choose a size for the selected glass vessel',
       });
     for (const category of categories) {
       const count = materials.filter((item) => item.category === category.code).length;

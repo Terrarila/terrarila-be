@@ -1,3 +1,4 @@
+import { auditChanges } from '../common/audit-context.js';
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 
@@ -58,13 +59,15 @@ export class CatalogAdminService {
       ([key], index) => `${mapping[key]}=$${index + 1}${key === 'images' ? '::jsonb' : ''}`,
     );
     const offset = entries.length;
-    values.push(id, revision, actor, JSON.stringify(input));
+    values.push(id, revision, actor, auditChanges(input));
     try {
       const result = await this.db.query(
-        `WITH changed AS (
-        UPDATE ${table} SET ${assignments.join(',')},revision=revision+1,updated_at=now() WHERE id=$${offset + 1}::uuid AND revision=$${offset + 2} RETURNING id,revision
+        `WITH previous AS MATERIALIZED (
+        SELECT to_jsonb(t) AS data FROM ${table} t WHERE id=$${offset + 1}::uuid AND revision=$${offset + 2} FOR UPDATE
+      ), changed AS (
+        UPDATE ${table} SET ${assignments.join(',')},revision=revision+1,updated_at=now() WHERE id=$${offset + 1}::uuid AND revision=$${offset + 2} AND EXISTS(SELECT 1 FROM previous) RETURNING id,revision
       ),audit AS (
-        INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) SELECT $${offset + 3},'${table}.updated',id,$${offset + 4}::jsonb FROM changed RETURNING id
+        INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) SELECT $${offset + 3},'${table}.updated',id,jsonb_set($${offset + 4}::jsonb,'{_before}',(SELECT data FROM previous)) FROM changed RETURNING id
       ) SELECT id,revision FROM changed`,
         values,
       );
@@ -118,7 +121,7 @@ export class CatalogAdminService {
         ).rows[0]!;
         await client.query(
           `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,$2,$3,$4::jsonb)`,
-          [actor, `${table}.created`, row.id, JSON.stringify(input)],
+          [actor, `${table}.created`, row.id, auditChanges(input)],
         );
         return row;
       });
@@ -168,7 +171,7 @@ export class CatalogAdminService {
         ).rows[0]!;
         await client.query(
           `INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'materials.created',$2,$3::jsonb)`,
-          [actor, row.id, JSON.stringify(input)],
+          [actor, row.id, auditChanges(input)],
         );
         return row;
       });

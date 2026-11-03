@@ -1,3 +1,4 @@
+import { Operations } from './common/operations.js';
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
@@ -5,11 +6,13 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, static as serveStatic } from 'express';
 import type { ErrorRequestHandler } from 'express';
 import helmet from 'helmet';
+import { AuditService } from './admin/audit.service.js';
 import { ApiExceptionFilter, requestContext } from './common/http.js';
 import type { AppConfig } from './common/config.js';
 
 export async function configureApp(app: INestApplication, config: AppConfig) {
   app.use(requestContext);
+  app.use(app.get(Operations).middleware(config.logRequests));
   app.use(helmet());
   app.use(
     '/assets',
@@ -46,7 +49,7 @@ export async function configureApp(app: INestApplication, config: AppConfig) {
     });
   };
   app.use('/assets', assetError);
-  app.use(json({ limit: '32kb', strict: true }));
+  app.use(json({ limit: '32kb', strict: true, inflate: false }));
   app.enableCors({
     origin: config.corsOrigins,
     credentials: false,
@@ -70,7 +73,7 @@ export async function configureApp(app: INestApplication, config: AppConfig) {
       validationError: { target: false, value: false },
     }),
   );
-  app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalFilters(new ApiExceptionFilter(app.get(AuditService)));
   app.enableShutdownHooks();
   if (config.swaggerEnabled) {
     const definition = new DocumentBuilder()

@@ -55,7 +55,7 @@ export async function saveAdminPassword(client: SqlClient, email: string, hash: 
     tokenHash(`email:${email}`),
   ]);
   await client.query(
-    "INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1::text,'admin.password_reset',$1::uuid,'{}')",
+    "INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES('operator:cli','admin.password_reset',$1::uuid,'{}')",
     [user.user_id],
   );
 }

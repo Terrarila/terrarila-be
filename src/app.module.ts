@@ -1,3 +1,7 @@
+import { Operations } from './common/operations.js';
+import { OperationsController } from './admin/operations.controller.js';
+import { AuditController } from './admin/audit.controller.js';
+import { AuditService } from './admin/audit.service.js';
 import { ConfigurationService } from './configuration/configuration.service.js';
 import { MediaController } from './media/media.controller.js';
 import { MediaService } from './media/media.service.js';
@@ -33,6 +37,8 @@ import type { AppConfig } from './common/config.js';
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    OperationsController,
+    AuditController,
     MediaController,
     DesignRequestsController,
     AdminDesignRequestsController,
@@ -47,6 +53,8 @@ import type { AppConfig } from './common/config.js';
     PublicPricingController,
   ],
   providers: [
+    Operations,
+    AuditService,
     MediaService,
     { provide: ASSET_STORAGE, useClass: LocalAssetStorage },
     ConfigurationService,

@@ -1,3 +1,4 @@
+import { AuditService } from '../admin/audit.service.js';
 import {
   Inject,
   Injectable,
@@ -28,6 +29,7 @@ export class AuthService {
   private passwordChecks = 0;
   constructor(
     @Inject(DatabaseService) private readonly db: DatabaseService,
+    @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(GOOGLE_VERIFY) private readonly verify: GoogleVerifier,
   ) {}
@@ -89,6 +91,7 @@ export class AuthService {
         await client.query('DELETE FROM auth_login_limits WHERE key_hash=$1', [emailKey]);
         return row;
       });
+      await this.audit.security('auth.login_succeeded', user.id, { method: 'password' });
       return { accessToken, tokenType: 'Bearer', expiresAt, user };
     } finally {
       this.passwordChecks--;
@@ -154,6 +157,7 @@ export class AuthService {
     );
     if (!result.rows[0])
       throw new UnauthorizedException('Login challenge expired, already used, or account disabled');
+    await this.audit.security('auth.login_succeeded', result.rows[0].id, { method: 'google' });
     return { accessToken, tokenType: 'Bearer', expiresAt, user: result.rows[0] };
   }
   async authenticate(token: string) {
@@ -165,8 +169,9 @@ export class AuthService {
     if (!result.rows[0]) throw new UnauthorizedException('Session expired or revoked');
     return result.rows[0];
   }
-  async logout(sessionId: string) {
+  async logout(sessionId: string, actor: string) {
     await this.db.query('UPDATE sessions SET revoked_at=now() WHERE id=$1', [sessionId]);
+    await this.audit.security('auth.logout', actor, {});
     return { loggedOut: true };
   }
 }

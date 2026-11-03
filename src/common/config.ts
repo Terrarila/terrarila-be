@@ -65,6 +65,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('SESSION_TTL_SECONDS must be 300..604800');
   return {
     environment,
+    logRequests:
+      env.LOG_REQUESTS === 'true' ||
+      (env.LOG_REQUESTS === undefined && environment === 'production'),
+    backupDir: resolve(env.BACKUP_DIR ?? 'backups'),
     mediaRoot: resolve(env.MEDIA_ROOT ?? 'storage/assets'),
     databaseUrl,
     ssl: ssl as 'disable' | 'verify-full',

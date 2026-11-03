@@ -1,0 +1,11 @@
+[Unit]
+Description=Petite Terre encrypted database and media backup
+After=network-online.target
+[Service]
+Type=oneshot
+User=petite-backup
+WorkingDirectory=/srv/petite-terre/terrarila-be
+EnvironmentFile=/etc/petite-terre/backup.env
+UMask=0077
+ExecStart=/usr/bin/node --import tsx --env-file-if-exists=.env scripts/operations/local-backup.ts
+# Grant only the DB/media access required; keep private restore key offline when moving off local dev.

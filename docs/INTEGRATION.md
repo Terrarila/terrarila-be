@@ -133,3 +133,24 @@ FE hiện có trang builder, receipt và quản lý yêu cầu. Google browser l
 ### Ảnh highlight sản phẩm
 
 Migration 013 thêm `products.highlight_image_url` nullable. POST/PATCH `/v1/admin/products` nhận `highlightImageUrl` (HTTPS hoặc `/assets/...`, tối đa 1024 ký tự); null để bỏ ảnh, không truyền khi PATCH thì giữ nguyên. GET public list/detail và admin list trả trường này. Gallery `images` giữ riêng; ảnh chính trên card là phần tử đầu tiên, ảnh highlight chỉ hiện khi hover bằng chuột. Admin upload cùng endpoint media hiện có. Portfolio không có trường highlight riêng.
+
+### Portfolio đồng bộ bể đã xuất bản
+
+GET `/v1/portfolio` kết hợp các mục Portfolio thủ công đã xuất bản với `products` có published=true. GET `/v1/admin/portfolio` thêm các Portfolio thủ công dạng nháp, nhưng vẫn không đưa bể bán sẵn dạng nháp vào. Mục từ sản phẩm trả `sourceProductId` bằng ID sản phẩm và `highlightImageUrl`; mục thủ công trả hai trường này null. Không sao chép dữ liệu vào portfolio_entries, không cần migration/backfill. Tên, slug, mô tả, ảnh chính/gallery, highlight và thứ tự của bể đồng bộ lấy từ sản phẩm gốc. Sửa hoặc bỏ xuất bản sản phẩm sẽ phản ánh ở lần đọc tiếp theo (public API có chính sách cache 60 giây như trước).
+
+Admin chỉnh mục đồng bộ tại Bể bán sẵn; không sửa độc lập qua PATCH Portfolio. Mục thủ công vẫn CRUD như trước. Giá/availability không được đưa vào response Portfolio. Hai nguồn dùng phân trang chung theo sortOrder/id.
+
+### Kích thước bể kính
+
+Migration 014 giữ nguyên ID của ba dáng bể và tạo 9 vật liệu size con. GET `/v1/materials?category=glass` trả ba dáng với `requiresSize: true`, `sizes: [{id,legacyId,parentMaterialId,sizeLabel,priceVnd,unit,availability,...}]`. Danh sách public chỉ trả các material gốc; danh sách admin trả cả material size để sửa giá/tình trạng của từng size. Size được gắn cố định với dáng; unit là bể. Nhãn Cubic giữ hai chiều như thông tin người dùng, không suy ra thêm chiều cao. Giá size ban đầu từ danh sách đã xác nhận; availability giữ theo dáng hiện có, không tự xác nhận tồn kho hoặc giá các vật liệu khác.
+
+Khi validate/gửi yêu cầu/custom quote, gửi ID của material size con trong `materialIds`/`items.materialId`, thay cho ID dáng bể. Không gửi cả dáng và size. Thiếu size bị 422 GLASS_SIZE_REQUIRED; size đã ẩn hoặc thuộc dáng bị ẩn/unavailable không được chấp nhận. Snapshot yêu cầu ghi sizeLabel, parentMaterialId và giá size tại lúc gửi (chưa phải báo giá cuối). Quote/order/invoice dùng giá size từ DB; thay giá/stock/revision hoặc ẩn dáng sau quote sẽ chặn tạo đơn như trước.
+
+Preset cũ chỉ có dáng vẫn có thể áp dụng để bắt đầu, nhưng người dùng phải tự chọn size trước khi gửi. FE giữ size trong Redux Persist; đổi dáng xóa size cũ, size không còn hợp lệ bị bỏ khi tải danh mục mới. Seed mới tạo đủ size cho DB trống; chạy seed lại không ghi đè giá/stock đã chỉnh. Không cần chạy seed lại trên DB đã có ba dáng khi áp migration 014.
+
+
+## Admin operations — 02/11/2026
+
+Migration 015 adds content revisions and append-only audit protection. Admin content reads use `GET /v1/admin/content/about` and `GET /v1/admin/storefront` (no public cache, includes unpublished content). PATCH requires `If-Match` matching the loaded revision; `0` only creates a genuinely absent record; stale writes return 409. Public content responses add `revision` without changing the `data` payload.
+
+`GET /v1/admin/audit-logs` supports bounded cursor pagination, exact `action`, `actor`, `entityId`, ISO `from`/`to`. Only admins may read it; no update/delete route exists. Changes include safe `_context` metadata and `_before` for catalog/content/pricing updates. `GET /v1/admin/operations/metrics` is also admin-only and includes process/latency/disk/local backup freshness. New media uploads add optional `thumbnailUrl` while retaining the original `url`. See [OPERATIONS.md](OPERATIONS.md) for encrypted backup, restore smoke, scheduling and deployment templates.

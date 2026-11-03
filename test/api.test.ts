@@ -33,7 +33,7 @@ let app: INestApplication;
 let sql: SqlClient;
 let cleanup: () => Promise<void>;
 let privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
-let members: { id: string; category: string; legacyId: string }[];
+let members: { id: string; category: string; legacyId: string; parentMaterialId: string | null }[];
 let subject = 10000;
 
 before(async () => {
@@ -84,8 +84,13 @@ before(async () => {
   }
   await seedCatalog(sql, 'https://assets.example');
   members = (
-    await sql.query<{ id: string; category: string; legacyId: string }>(
-      `SELECT m.id,c.code AS category,m.legacy_id AS "legacyId" FROM materials m JOIN material_categories c ON c.id=m.category_id ORDER BY c.sort_order,m.sort_order`,
+    await sql.query<{
+      id: string;
+      category: string;
+      legacyId: string;
+      parentMaterialId: string | null;
+    }>(
+      `SELECT m.id,c.code AS category,m.legacy_id AS "legacyId",m.parent_material_id AS "parentMaterialId" FROM materials m JOIN material_categories c ON c.id=m.category_id ORDER BY c.sort_order,m.sort_order`,
     )
   ).rows;
   const keys = await generateKeyPair('RS256');
@@ -109,9 +114,12 @@ after(async () => {
   await rm(config.mediaRoot, { recursive: true, force: true });
 });
 beforeEach(async () => {
+  // Only the disposable fixture owner bypasses append-only protection to reset each test.
+  await sql.query('ALTER TABLE admin_audit_log DISABLE TRIGGER admin_audit_append_only');
   await sql.query(
     'TRUNCATE auth_login_limits,design_requests,payments,invoices,orders,quotes,sessions,auth_challenges,users,admin_audit_log CASCADE',
   );
+  await sql.query('ALTER TABLE admin_audit_log ENABLE TRIGGER admin_audit_append_only');
   await sql.query(
     `UPDATE materials SET price_vnd=NULL,unit=NULL,availability='inquiry',published=true,revision=1`,
   );
@@ -121,7 +129,10 @@ beforeEach(async () => {
   );
 });
 const server = () => app.getHttpServer();
-const ids = (category: string) => members.filter((m) => m.category === category).map((m) => m.id);
+const ids = (category: string) =>
+  members
+    .filter((m) => m.category === category && (category !== 'glass' || m.parentMaterialId !== null))
+    .map((m) => m.id);
 async function login(admin = false) {
   const sub = String(++subject);
   const challenge = await request(server()).post('/v1/auth/challenge').expect(200);
@@ -563,8 +574,10 @@ test('admin catalog create/publish and About editing are protected; product quot
     })
     .expect(201);
   assert.ok(portfolio.body.id);
+  const contentRevision = (await request(server()).get('/v1/content/about')).body.revision;
   const about = await request(server())
     .patch('/v1/admin/content/about')
+    .set('If-Match', String(contentRevision))
     .auth(admin.token, { type: 'bearer' })
     .send({ title: 'Updated story', eyebrow: 'Petite Terre', paragraphs: ['A story'] })
     .expect(200);
@@ -754,7 +767,11 @@ test('design presets include a complete editable recipe, preserve seed edits, an
   assert.ok(preset.imageUrl.endsWith('/assets/products/attempt-1.jpg'));
   await request(server())
     .post('/v1/configurations/validate')
-    .send({ materialIds: preset.materials.map((item: { id: string }) => item.id) })
+    .send({
+      materialIds: preset.materials.map((item: { id: string; category: string }) =>
+        item.category === 'glass' ? ids('glass')[0] : item.id,
+      ),
+    })
     .expect(200);
   const chosen = preset.materials.find((item: { category: string }) => item.category === 'moss');
   try {
@@ -984,14 +1001,14 @@ test('admin image upload validates actual bytes, stores metadata, serves bytes a
   assert.equal(record.original_name, 'plant.png');
   assert.equal(record.size_bytes, result.body.sizeBytes);
   await request(server())
-    .patch(`/v1/admin/materials/${members[0]!.id}`)
+    .patch(`/v1/admin/materials/${ids('moss')[0]!}`)
     .auth(admin.token, { type: 'bearer' })
     .set('If-Match', '1')
     .send({ imageUrl: result.body.url })
     .expect(200);
   const material = (
     await request(server()).get('/v1/materials?limit=100').expect(200)
-  ).body.items.find((row: { id: string }) => row.id === members[0]!.id);
+  ).body.items.find((row: { id: string }) => row.id === ids('moss')[0]!);
   assert.equal(material.imageUrl, result.body.url);
   await request(server()).get('/assets/missing.png').expect(404);
   await request(server()).get('/assets/.incoming/private').expect(403);
@@ -1055,4 +1072,390 @@ test('upload rejects missing files, SVG, forged MIME, corrupt image, oversize an
     ).rows[0]?.count ?? 0,
     0,
   );
+});
+
+test('portfolio combines manual entries with live published products without copies or draft leaks', async () => {
+  const previousCount = Number(
+    (await sql.query<{ count: string }>('SELECT count(*) AS count FROM portfolio_entries')).rows[0]!
+      .count,
+  );
+  await sql.query('UPDATE portfolio_entries SET published=false');
+  const admin = await login(true);
+  const createProduct = await request(server())
+    .post('/v1/admin/products')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Synced product',
+      slug: 'shared-slug',
+      images: [{ url: '/assets/main.webp', alt: 'Main' }],
+      highlightImageUrl: '/assets/highlight.webp',
+      published: false,
+    })
+    .expect(201);
+  const productId = createProduct.body.id;
+  const manual = await request(server())
+    .post('/v1/admin/portfolio')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Manual composition',
+      slug: 'shared-slug',
+      images: [{ url: '/assets/manual.webp', alt: 'Manual' }],
+      published: true,
+    })
+    .expect(201);
+  const list = async (adminView = false) => {
+    const req = request(server()).get(
+      adminView ? '/v1/admin/portfolio?limit=100' : '/v1/portfolio?limit=100',
+    );
+    if (adminView) req.auth(admin.token, { type: 'bearer' });
+    return (await req.expect(200)).body.items as {
+      id: string;
+      sourceProductId: string | null;
+      name: string;
+      images: { url: string; alt: string }[];
+      highlightImageUrl: string | null;
+    }[];
+  };
+  assert.equal(
+    (await list(true)).some((p) => p.id === productId),
+    false,
+  );
+  await request(server())
+    .patch(`/v1/admin/products/${productId}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ published: true })
+    .expect(200);
+  let synced = (await list()).find((p) => p.sourceProductId === productId)!;
+  assert.equal(synced.id, productId);
+  assert.equal(synced.highlightImageUrl, '/assets/highlight.webp');
+  assert.equal(Object.hasOwn(synced, 'priceVnd'), false);
+  assert.equal((await list()).find((p) => p.id === manual.body.id)?.name, 'Manual composition');
+  await request(server())
+    .patch(`/v1/admin/products/${productId}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '2')
+    .send({
+      name: 'Updated source',
+      description: 'Updated description',
+      images: [{ url: '/assets/new.webp', alt: 'Updated' }],
+      highlightImageUrl: null,
+      sortOrder: 3,
+    })
+    .expect(200);
+  synced = (await list()).find((p) => p.sourceProductId === productId)!;
+  assert.equal(synced.name, 'Updated source');
+  assert.equal(synced.images[0]!.url, '/assets/new.webp');
+  assert.equal(synced.highlightImageUrl, null);
+  await request(server())
+    .patch(`/v1/admin/portfolio/${productId}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '3')
+    .send({ name: 'Wrong edit' })
+    .expect(409);
+  const first = await request(server()).get('/v1/portfolio?limit=1').expect(200);
+  const second = await request(server())
+    .get(`/v1/portfolio?limit=1&cursor=${encodeURIComponent(first.body.nextCursor)}`)
+    .expect(200);
+  assert.equal(first.body.items[0].id, manual.body.id);
+  assert.equal(second.body.items[0].id, productId);
+  assert.equal(second.body.nextCursor, null);
+  await request(server())
+    .patch(`/v1/admin/products/${productId}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '3')
+    .send({ published: false })
+    .expect(200);
+  assert.equal(
+    (await list()).some((p) => p.id === productId),
+    false,
+  );
+  assert.equal(
+    (await list(true)).some((p) => p.id === productId),
+    false,
+  );
+  await request(server())
+    .patch(`/v1/admin/products/${productId}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '4')
+    .send({ published: true })
+    .expect(200);
+  assert.equal((await list()).filter((p) => p.sourceProductId === productId).length, 1);
+  assert.equal(
+    Number(
+      (await sql.query<{ count: string }>('SELECT count(*) AS count FROM portfolio_entries'))
+        .rows[0]!.count,
+    ),
+    previousCount + 1,
+  );
+});
+
+test('glass catalog groups nine size materials under three stable shapes and validates a chosen size', async () => {
+  const definitions = JSON.parse(await readFile('scripts/glass-sizes-seed.json', 'utf8')) as {
+    parent: string;
+    code: string;
+    label: string;
+    priceVnd: number;
+  }[];
+  const shapes = (await request(server()).get('/v1/materials?category=glass&limit=100').expect(200))
+    .body.items;
+  assert.equal(shapes.length, 3);
+  assert.equal(shapes.flatMap((p: { sizes: unknown[] }) => p.sizes).length, 9);
+  for (const definition of definitions) {
+    const shape = shapes.find((p: { legacyId: string }) => p.legacyId === definition.parent);
+    assert.equal(shape.requiresSize, true);
+    const child = shape.sizes.find(
+      (p: { legacyId: string }) => p.legacyId === `${definition.parent}-${definition.code}`,
+    );
+    assert.equal(child.sizeLabel, definition.label);
+    assert.equal(child.parentMaterialId, shape.id);
+    // beforeEach clears test prices; the explicit seed never overwrites those edits.
+    await sql.query('UPDATE materials SET price_vnd=$2,unit=$3 WHERE id=$1', [
+      child.id,
+      definition.priceVnd,
+      'bể',
+    ]);
+  }
+  const refreshed = (
+    await request(server()).get('/v1/materials?category=glass&limit=100').expect(200)
+  ).body.items;
+  assert.deepEqual(
+    refreshed
+      .find((p: { legacyId: string }) => p.legacyId === 'cubic-square')
+      .sizes.map((s: { priceVnd: number }) => s.priceVnd),
+    [60000, 80000, 100000, 130000],
+  );
+  const shape = refreshed.find((p: { legacyId: string }) => p.legacyId === 'vertical-rectangle');
+  const size = shape.sizes[0];
+  await request(server())
+    .post('/v1/configurations/validate')
+    .send({ materialIds: [shape.id] })
+    .expect(422);
+  await request(server())
+    .post('/v1/configurations/validate')
+    .send({ materialIds: [size.id] })
+    .expect(200);
+  await request(server())
+    .post('/v1/configurations/validate')
+    .send({ materialIds: [shape.id, size.id] })
+    .expect(422);
+  const receipt = await inquire(randomUUID(), { ...guestInput(), materialIds: [size.id] }).expect(
+    201,
+  );
+  const saved = await request(server())
+    .get(`/v1/design-requests/${receipt.body.id}`)
+    .auth(guestToken, { type: 'bearer' })
+    .expect(200);
+  assert.equal(saved.body.selection[0].sizeLabel, size.sizeLabel);
+  assert.equal(saved.body.selection[0].priceVnd, 150000);
+  assert.equal(saved.body.selection[0].id, size.id);
+  await sql.query('UPDATE materials SET price_vnd=170000 WHERE id=$1', [size.id]);
+  await seedCatalog(sql, 'https://assets.example');
+  assert.equal(
+    (await sql.query('SELECT price_vnd FROM materials WHERE id=$1', [size.id])).rows[0]!.price_vnd,
+    170000,
+  );
+});
+
+test('custom quote uses size price and snapshot, rejects shape-only and parent-hidden orders', async () => {
+  const admin = await login(true);
+  await configurePricing(admin.token);
+  const shapes = (await request(server()).get('/v1/materials?category=glass&limit=100').expect(200))
+    .body.items;
+  const shape = shapes.find((p: { legacyId: string }) => p.legacyId === 'vertical-rectangle');
+  const size = shape.sizes[0];
+  await sql.query("UPDATE materials SET price_vnd=150000,unit='bể' WHERE id=$1", [size.id]);
+  const input = { kind: 'custom', items: [{ materialId: size.id, quantity: 1 }] };
+  await request(server())
+    .post('/v1/quotes')
+    .auth(admin.token, { type: 'bearer' })
+    .send({ kind: 'custom', items: [{ materialId: shape.id, quantity: 1 }] })
+    .expect(422);
+  const quote = await request(server())
+    .post('/v1/quotes')
+    .auth(admin.token, { type: 'bearer' })
+    .send(input)
+    .expect(201);
+  assert.equal(quote.body.subtotalVnd, 150000);
+  assert.equal(quote.body.totalVnd, 225000);
+  assert.equal(quote.body.items[0].sizeLabel, size.sizeLabel);
+  const order = await request(server())
+    .post('/v1/orders')
+    .auth(admin.token, { type: 'bearer' })
+    .set('Idempotency-Key', randomUUID())
+    .send(orderInput(quote.body.id))
+    .expect(201);
+  const invoice = await request(server())
+    .get(`/v1/orders/${order.body.id}/invoice`)
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.equal(invoice.body.snapshot.items[0].parentMaterialId, shape.id);
+  assert.equal(invoice.body.snapshot.items[0].unitPriceVnd, 150000);
+  const fresh = await request(server())
+    .post('/v1/quotes')
+    .auth(admin.token, { type: 'bearer' })
+    .send(input)
+    .expect(201);
+  await sql.query('UPDATE materials SET published=false WHERE id=$1', [shape.id]);
+  await request(server())
+    .post('/v1/orders')
+    .auth(admin.token, { type: 'bearer' })
+    .set('Idempotency-Key', randomUUID())
+    .send(orderInput(fresh.body.id))
+    .expect(409);
+  await request(server())
+    .post('/v1/configurations/validate')
+    .send({ materialIds: [size.id] })
+    .expect(400);
+});
+
+test('admin audit is private, filtered, paginated, contextual and append-only', async () => {
+  const admin = await login(true),
+    customer = await login();
+  await request(server()).get('/v1/admin/audit-logs').expect(401);
+  await request(server())
+    .get('/v1/admin/audit-logs')
+    .auth(customer.token, { type: 'bearer' })
+    .expect(403);
+  const requestId = randomUUID();
+  const previousMaterial = (
+    await sql.query('SELECT name FROM materials WHERE id=$1', [ids('moss')[0]])
+  ).rows[0];
+  await request(server())
+    .patch(`/v1/admin/materials/${ids('moss')[0]}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .set('X-Request-Id', requestId)
+    .send({ name: 'Audited moss' })
+    .expect(200);
+  const page = await request(server())
+    .get('/v1/admin/audit-logs?action=materials.updated&limit=1')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.equal(page.body.items.length, 1);
+  assert.equal(page.body.items[0].changes._context.requestId, requestId);
+  assert.equal(page.body.items[0].actor, admin.userId);
+  assert.equal(page.body.items[0].changes._before.name, previousMaterial!.name);
+  const denied = await request(server())
+    .get('/v1/admin/audit-logs?action=security.request_denied&limit=1')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.ok(denied.body.nextCursor);
+  const second = await request(server())
+    .get(
+      `/v1/admin/audit-logs?action=security.request_denied&limit=1&cursor=${denied.body.nextCursor}`,
+    )
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.notEqual(second.body.items[0].id, denied.body.items[0].id);
+  const serialized = JSON.stringify(page.body) + JSON.stringify(denied.body);
+  assert.ok(!serialized.includes(admin.token));
+  await assert.rejects(sql.query('DELETE FROM admin_audit_log'));
+  await assert.rejects(sql.query("UPDATE admin_audit_log SET action='tampered'"));
+  await assert.rejects(sql.query('TRUNCATE admin_audit_log'));
+  await request(server())
+    .get('/v1/admin/audit-logs?entityId=invalid')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(400);
+});
+
+test('content revisions prevent stale overwrite and audit stores the previous content', async () => {
+  const admin = await login(true);
+  const current = await request(server())
+    .get('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  const payload = { title: 'Revision safe', eyebrow: 'Test', paragraphs: ['Keep this'] };
+  await request(server())
+    .patch('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .send(payload)
+    .expect(400);
+  const changed = await request(server())
+    .patch('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', String(current.body.revision))
+    .send(payload)
+    .expect(200);
+  assert.equal(changed.body.revision, current.body.revision + 1);
+  await request(server())
+    .patch('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', String(current.body.revision))
+    .send({ ...payload, title: 'Stale tab' })
+    .expect(409);
+  const final = await request(server()).get('/v1/content/about').expect(200);
+  assert.equal(final.body.data.title, payload.title);
+  const log = await request(server())
+    .get('/v1/admin/audit-logs?action=content.about.updated')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.deepEqual(log.body.items[0].changes._before, current.body.data);
+});
+
+test('operations metrics require admin and compressed JSON is rejected safely', async () => {
+  const admin = await login(true),
+    user = await login();
+  await request(server()).get('/v1/admin/operations/metrics').expect(401);
+  await request(server())
+    .get('/v1/admin/operations/metrics')
+    .auth(user.token, { type: 'bearer' })
+    .expect(403);
+  const result = await request(server())
+    .get('/v1/admin/operations/metrics')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.ok(result.body.requests > 0);
+  assert.ok(result.body.memory.rss > 0);
+  assert.ok(Array.isArray(result.body.latencyBuckets));
+  const { gzipSync } = await import('node:zlib');
+  await request(server())
+    .post('/v1/auth/admin/login')
+    .set('Content-Type', 'application/json')
+    .set('Content-Encoding', 'gzip')
+    .send(gzipSync(Buffer.from('{}')))
+    .expect(415);
+});
+
+test('login/logout security audit excludes tokens and passwords', async () => {
+  const admin = await login(true);
+  await request(server())
+    .post('/v1/auth/admin/login')
+    .send({ email: 'unknown@example.test', password: 'NeverLogThisPassword' })
+    .expect(401);
+  const failures = await request(server())
+    .get('/v1/admin/audit-logs?action=auth.login_failed')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.equal(failures.body.items.length, 1);
+  const safe = JSON.stringify(failures.body);
+  assert.ok(!safe.includes('NeverLogThisPassword'));
+  assert.ok(!safe.includes('unknown@example.test'));
+  await request(server()).post('/v1/auth/logout').auth(admin.token, { type: 'bearer' }).expect(200);
+  const log = (
+    await sql.query(
+      "SELECT changes FROM admin_audit_log WHERE action='auth.logout' AND actor_subject=$1",
+      [admin.userId],
+    )
+  ).rows;
+  assert.equal(log.length, 1);
+  assert.ok(!JSON.stringify(log).includes(admin.token));
+});
+
+test('admin reads unpublished content revisions without exposing it publicly', async () => {
+  const admin = await login(true);
+  await sql.query("UPDATE site_content SET published=false WHERE key='about'");
+  await request(server()).get('/v1/content/about').expect(404);
+  const document = await request(server())
+    .get('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.ok(document.body.revision > 0);
+  await request(server())
+    .patch('/v1/admin/content/about')
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', String(document.body.revision))
+    .send(document.body.data)
+    .expect(200);
+  await request(server()).get('/v1/content/about').expect(200);
 });
