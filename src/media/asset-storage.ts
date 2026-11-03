@@ -8,7 +8,7 @@ import type { AppConfig } from '../common/config.js';
 // Replace this adapter when moving to object storage; catalog keeps stable asset URLs.
 export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
 export interface AssetStorage {
-  readonly provider: 'local';
+  readonly provider: 'local' | 'vercel-blob';
   put(key: string, data: Buffer): Promise<void>;
   remove(key: string): Promise<void>;
 }

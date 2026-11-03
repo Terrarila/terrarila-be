@@ -3,8 +3,12 @@ import { OperationsController } from './admin/operations.controller.js';
 import { AuditController } from './admin/audit.controller.js';
 import { AuditService } from './admin/audit.service.js';
 import { ConfigurationService } from './configuration/configuration.service.js';
+import { MediaMaintenanceController } from './media/media-maintenance.controller.js';
 import { MediaController } from './media/media.controller.js';
 import { MediaService } from './media/media.service.js';
+import { BlobAssetStorage } from './media/blob-storage.js';
+import { UploadIntentsService } from './media/upload-intents.service.js';
+import { BLOB_UPLOAD_STORE, VercelBlobUploadStore } from './media/blob-upload-store.js';
 import { ASSET_STORAGE, LocalAssetStorage } from './media/asset-storage.js';
 import { DesignRequestsService } from './requests/requests.service.js';
 import {
@@ -40,6 +44,7 @@ import type { AppConfig } from './common/config.js';
     OperationsController,
     AuditController,
     MediaController,
+    MediaMaintenanceController,
     DesignRequestsController,
     AdminDesignRequestsController,
     CatalogController,
@@ -56,7 +61,16 @@ import type { AppConfig } from './common/config.js';
     Operations,
     AuditService,
     MediaService,
-    { provide: ASSET_STORAGE, useClass: LocalAssetStorage },
+    UploadIntentsService,
+    LocalAssetStorage,
+    BlobAssetStorage,
+    { provide: BLOB_UPLOAD_STORE, useClass: VercelBlobUploadStore },
+    {
+      provide: ASSET_STORAGE,
+      inject: [CONFIG, LocalAssetStorage, BlobAssetStorage],
+      useFactory: (config: AppConfig, local: LocalAssetStorage, blob: BlobAssetStorage) =>
+        config.mediaStorage === 'vercel-blob' ? blob : local,
+    },
     ConfigurationService,
     DesignRequestsService,
     CatalogAdminService,

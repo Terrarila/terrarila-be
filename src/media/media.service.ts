@@ -10,6 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import sharp from 'sharp';
 import { DatabaseService } from '../database/database.service.js';
+import type { SqlClient } from '../database/database.service.js';
 import { ASSET_STORAGE } from './asset-storage.js';
 import type { AssetStorage } from './asset-storage.js';
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -29,7 +30,11 @@ export class MediaService {
     @Inject(DatabaseService) private readonly db: DatabaseService,
     @Inject(ASSET_STORAGE) private readonly storage: AssetStorage,
   ) {}
-  async upload(file: ImageUpload | undefined, actor: string) {
+  async upload(
+    file: ImageUpload | undefined,
+    actor: string,
+    options?: { id: string; client: SqlClient },
+  ) {
     if (!file?.buffer.length) throw new BadRequestException('Chọn một ảnh PNG, JPG hoặc WebP');
     if (file.buffer.length > MAX_IMAGE_BYTES)
       throw new PayloadTooLargeException('Ảnh tối đa 10 MiB');
@@ -64,7 +69,7 @@ export class MediaService {
       }
       if (output.data.length > 20 * 1024 * 1024)
         throw new PayloadTooLargeException('Ảnh sau xử lý quá lớn');
-      const id = randomUUID();
+      const id = options?.id ?? randomUUID();
       const key = `uploads/${id}.webp`;
       const url = `/assets/${key}`;
       const thumbnailKey = `uploads/${id}-thumb.webp`;
@@ -84,7 +89,7 @@ export class MediaService {
       await this.storage.put(key, output.data);
       try {
         await this.storage.put(thumbnailKey, thumbnail);
-        await this.db.transaction(async (client) => {
+        const persist = async (client: SqlClient) => {
           await client.query(
             `INSERT INTO media_assets(id,storage_provider,storage_key,url,original_name,mime_type,size_bytes,width,height,sha256,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
@@ -108,7 +113,9 @@ export class MediaService {
             "INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,'media.uploaded',$2,$3::jsonb)",
             [actor, id, auditChanges(result)],
           );
-        });
+        };
+        if (options?.client) await persist(options.client);
+        else await this.db.transaction(persist);
       } catch (error) {
         await Promise.all([this.storage.remove(key), this.storage.remove(thumbnailKey)]);
         throw error;

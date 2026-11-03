@@ -1,3 +1,4 @@
+import { assetRedirect } from './media/asset-redirect.js';
 import { Operations } from './common/operations.js';
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
@@ -14,28 +15,31 @@ export async function configureApp(app: INestApplication, config: AppConfig) {
   app.use(requestContext);
   app.use(app.get(Operations).middleware(config.logRequests));
   app.use(helmet());
-  app.use(
-    '/assets',
-    serveStatic(config.mediaRoot, {
-      dotfiles: 'deny',
-      index: false,
-      redirect: false,
-      fallthrough: false,
-      maxAge: '1d',
-      setHeaders(response, filePath) {
-        response.setHeader(
-          'Cache-Control',
-          filePath.includes('/uploads/')
-            ? 'public, max-age=31536000, immutable'
-            : 'public, max-age=3600',
-        );
-        response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-        response.setHeader('Access-Control-Allow-Origin', '*');
-        response.setHeader('X-Content-Type-Options', 'nosniff');
-        response.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-      },
-    }),
-  );
+  if (config.mediaStorage === 'vercel-blob')
+    app.use('/assets', assetRedirect(config.assetBaseUrl!));
+  else
+    app.use(
+      '/assets',
+      serveStatic(config.mediaRoot, {
+        dotfiles: 'deny',
+        index: false,
+        redirect: false,
+        fallthrough: false,
+        maxAge: '1d',
+        setHeaders(response, filePath) {
+          response.setHeader(
+            'Cache-Control',
+            filePath.includes('/uploads/')
+              ? 'public, max-age=31536000, immutable'
+              : 'public, max-age=3600',
+          );
+          response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          response.setHeader('Access-Control-Allow-Origin', '*');
+          response.setHeader('X-Content-Type-Options', 'nosniff');
+          response.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        },
+      }),
+    );
   const assetError: ErrorRequestHandler = (
     error: { status?: number },
     _request,

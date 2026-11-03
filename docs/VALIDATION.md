@@ -80,3 +80,12 @@ Chrome trong cửa sổ kiểm thử riêng xác nhận đúng 3/4/2 size từng
 - Read-only Docker-local public materials probe: 200 requests, concurrency 4, 0 failures, p50 4 ms / p95 9 ms / p99 135 ms. Authenticated admin fixture probe: 200 requests, concurrency 4, 0 failures, p50 9 ms / p95 12 ms / p99 22 ms. These are local synthetic baselines, not production capacity measurements.
 - Chrome desktop fixture smoke: login, audit history/details, operations metrics/backup freshness, About save with success notification and a corresponding audit entry, logout back to sign-in. Shop content was not edited during browser QA.
 - Nginx example passed `nginx -t` in a disposable official nginx container with a temporary test certificate. No production TLS host, off-machine backup or external alert destination is enabled. See OPERATIONS.md for installation, restore and deployment boundaries.
+
+
+## Vercel Blob / Preview preparation · 03/11/2026
+
+Media supports local and vercel-blob. Migration 016 adds owner-bound upload intents and permits the Blob provider; health/ready checks the new table. Public media and private staging use distinct tokens. Metadata-only endpoints issue 15-minute path/size/MIME-bound tokens; the browser uploads directly and complete reads the DB-bound private path. The existing signature/Sharp/pixel/output checks remain. A DB row lock + shared transaction commits media/audit/intent result; completed retries are idempotent. Authenticated maintenance removes expired staging/orphans, skips locked rows and preserves committed media. Existing /assets paths redirect to CDN; large files are not returned through a Function.
+
+39/39 tests PASS, including new PGlite integration tests with fake Blob IO and actual >4.5 MiB PNG processing, auth/ownership, invalid bytes, expiry, idempotency, CDN redirect and maintenance. Typecheck/lint/format/build PASS. npm audit --omit=dev: 0 reported vulnerabilities after pinning patched zod for the Blob SDK dependency chain. These tests do not confirm actual Vercel Blob client tokens/private store behavior on a hosted deployment.
+
+media:sync-blob dry-run inventories 49 files / 156541366 bytes at check time; no cloud upload or database migration was run. Apply mode verifies SHA-256 and refuses conflicting immutable paths; provider metadata changes require explicit --mark-provider after a full successful copy. Vercel account connection, Preview PostgreSQL/TLS, real public/private stores and actual Drive upload remain pending. Full setup/acceptance is documented in VERCEL-PREVIEW.md.

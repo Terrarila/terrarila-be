@@ -1,0 +1,14 @@
+.git/
+node_modules/
+dist/
+.test-dist/
+.env*
+!.env.example
+storage/
+backups/
+reference/
+coverage/
+*.pem
+*.key
+*.ptbackup
+*.log

@@ -14,7 +14,7 @@ FE Next rewrite `/assets/*` đến `TERRALA_ASSET_URL`, fallback `TERRALA_API_UR
 
 Migration 012 chuyển URL ảnh cũ `http://localhost:3000/assets/...` và `http://127.0.0.1:3000/assets/...` trong các trường ảnh thành đường dẫn tương đối. Không thay host bên ngoài hoặc giá/tồn kho/publish.
 
-## Luồng upload
+## Luồng upload local
 
 Form vật liệu, sản phẩm, portfolio và About cho chọn file. Browser gửi `POST /v1/admin/media`, Bearer admin, `multipart/form-data`, field `file` duy nhất; không tự đặt Content-Type boundary.
 
@@ -45,4 +45,8 @@ Backup **cả PostgreSQL và toàn bộ MEDIA_ROOT**, gồm uploads. Không dùn
 
 ## Sau này dùng Vercel/object storage
 
-Adapter hiện tại chỉ có `LocalAssetStorage` qua interface `AssetStorage`. Chưa có S3/Blob adapter và chưa deploy Vercel. Khi chuyển: bổ sung adapter, metadata provider/migration phù hợp, chuyển file gốc và upload, giữ mapping URL `/assets` qua proxy/CDN hoặc migrate URL có kiểm tra. Cấu hình hiện tại từ chối chạy khi có `VERCEL` để không nhận upload vào ổ tạm rồi mất dữ liệu.
+Có LocalAssetStorage và BlobAssetStorage. MEDIA_STORAGE=vercel-blob dùng Blob public cho assets/ và store private riêng cho incoming/. Migration 016 mở rộng provider và thêm upload intents. Browser gửi metadata để lấy client token ràng buộc pathname/size/MIME, upload trực tiếp private, rồi gọi complete (không gửi URL tùy ý). BE kiểm tra bytes, giải mã và lưu WebP/thumbnail public, metadata/audit/intent-result chung transaction; retry trả cùng result. Cron có xác thực dọn staging hết hạn và orphan, không xóa media đã commit.
+
+Đường dẫn catalog /assets/... giữ nguyên. BE redirect sang public Blob CDN, FE rewrite trực tiếp CDN; không stream GLB hay ảnh lớn qua Function. Script media:sync-blob mặc định dry-run; --apply copy/verify SHA-256, không xóa file local; --mark-provider chỉ đổi metadata DB sau khi kiểm tra đầy đủ.
+
+Chi tiết cấu hình và bước tạo Preview: [VERCEL-PREVIEW.md](VERCEL-PREVIEW.md). Chưa có xác nhận live Blob/Preview chỉ từ việc build local.

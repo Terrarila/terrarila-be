@@ -67,17 +67,11 @@ Role không lấy từ request đăng ký hoặc email do FE gửi. Session ng�
 
 ## Deploy Vercel
 
-**Hiện dùng filesystem có volume. Chưa có adapter object storage; cấu hình hiện tại sẽ từ chối khởi động trên Vercel để tránh lưu upload vào ổ đĩa tạm.** Cần triển khai adapter và chuyển dữ liệu trước khi thực hiện các bước dưới.
+Có adapter Vercel Blob và luồng upload trực tiếp private staging → kiểm tra bytes → WebP public. Trên Vercel bắt buộc MEDIA_STORAGE=vercel-blob; không dùng ổ đĩa tạm để lưu media. Cần migrations đến 016, PostgreSQL hosted/TLS, hai Blob stores riêng và chuyển media hiện có trước khi kiểm tra Preview.
 
-Tạo project Vercel với **Root Directory `terrarila-be`**, Node.js **24.x**, framework NestJS. Vercel hỗ trợ entry `src/main.ts` trực tiếp; source dùng `app.listen`, không thêm Express catch-all hay rewrite kiểu cũ. Chưa deploy trong lần này.
+Hướng dẫn tài khoản, Neon Free qua Marketplace, ba project/env, chuyển assets và acceptance: [VERCEL-PREVIEW.md](docs/VERCEL-PREVIEW.md). Repo này độc lập: Root Directory là gốc repo (`.`), Node 24.x, native NestJS src/main.ts. Pool được attach vào lifecycle Vercel; không migrate/seed trong mỗi request hoặc startup function.
 
-1. Tạo Postgres ngoài function qua Neon/Supabase hoặc dịch vụ tương đương; chọn region gần BE. Dùng URL pooler theo hướng dẫn nhà cung cấp cho `DATABASE_URL`, URL migration có thể tách qua `MIGRATION_DATABASE_URL`.
-2. Đặt `NODE_ENV=production`, `PG_SSL=verify-full`, `CORS_ORIGINS` là danh sách origin HTTPS cụ thể, `GOOGLE_CLIENT_ID`, `ASSET_BASE_URL` là BE/CDN phục vụ ảnh thật (hoặc để trống khi dùng proxy cùng origin). Tắt `SWAGGER_ENABLED` trên public production nếu không cần.
-3. Chạy migrate trước release bằng CI/CLI có quyền DB; seed một lần. Không lưu file upload hay DB trong filesystem function.
-4. Pool dùng lại theo warm instance; `attachDatabasePool` khi chạy trên Vercel, giới hạn mặc định 5 kết nối/instance. Đây không phải giới hạn toàn deployment: cần pooler và ngân sách kết nối phù hợp số instance.
-5. Cấu hình Vercel WAF/rate limit cho challenge/login/quote/order trước khi mở public. Chưa có distributed rate limiter trong source. Cấu hình backup, theo dõi lỗi và job dọn session theo lịch riêng.
-
-Tài liệu chính thức: [NestJS trên Vercel](https://vercel.com/docs/frameworks/backend/nestjs), [connection pooling](https://vercel.com/kb/guide/connection-pooling-with-functions), [Google ID token](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token).
+Các local tests dùng PGlite và Blob store giả không chứng minh upload Blob/Google Drive/hosted PostgreSQL đã chạy thật trên Preview. Backup filesystem và metrics theo process vẫn cần vận hành cloud phù hợp trước production.
 
 ## Kiểm tra và vận hành
 

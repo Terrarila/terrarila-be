@@ -1,6 +1,6 @@
 # Admin security, backup and operation
 
-This implementation targets local/VPS persistent storage. Object storage must replace the media adapter before a Vercel deployment. Production domains, TLS certificates and off-machine backup storage are not configured by this repository.
+Local/VPS mode uses persistent filesystem storage. Vercel mode now uses public/private Blob stores and direct upload intents; see VERCEL-PREVIEW.md. The encrypted backup commands below cover local DB/media only, not Blob store backups. Configure provider backups, monitoring and production domains separately.
 
 ## Local encrypted backup
 

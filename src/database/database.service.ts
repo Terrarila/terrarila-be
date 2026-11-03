@@ -1,6 +1,7 @@
 import { Global, Inject, Injectable, Logger, Module } from '@nestjs/common';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { Pool } from 'pg';
+import { attachDatabasePool } from '@vercel/functions';
 import type { QueryResultRow } from 'pg';
 import { CONFIG, loadConfig } from '../common/config.js';
 import type { AppConfig } from '../common/config.js';
@@ -29,6 +30,7 @@ export function createPool(config: AppConfig, url = config.databaseUrl) {
     application_name: 'terrarila-be',
     ssl: config.ssl === 'verify-full' ? { rejectUnauthorized: true } : false,
   });
+  if (config.vercel) attachDatabasePool(pool);
   pool.on('error', () => Logger.error('Idle database connection failed', 'PostgreSQL'));
   return pool;
 }
