@@ -6,9 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, static as serveStatic } from 'express';
 import type { ErrorRequestHandler } from 'express';
-// Use Helmet's explicit CommonJS default across NodeNext and Vercel's TS loader.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import helmet = require('helmet');
+import * as helmet from 'helmet';
 import { AuditService } from './admin/audit.service.js';
 import { ApiExceptionFilter, requestContext } from './common/http.js';
 import type { AppConfig } from './common/config.js';
