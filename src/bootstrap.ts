@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, static as serveStatic } from 'express';
 import type { ErrorRequestHandler } from 'express';
-import * as helmet from 'helmet';
+import { createSecurityHeaders } from './common/security-headers.js';
 import { AuditService } from './admin/audit.service.js';
 import { ApiExceptionFilter, requestContext } from './common/http.js';
 import type { AppConfig } from './common/config.js';
@@ -14,7 +14,7 @@ import type { AppConfig } from './common/config.js';
 export async function configureApp(app: INestApplication, config: AppConfig) {
   app.use(requestContext);
   app.use(app.get(Operations).middleware(config.logRequests));
-  app.use(helmet.default());
+  app.use(createSecurityHeaders());
   if (config.mediaStorage === 'vercel-blob')
     app.use('/assets', assetRedirect(config.assetBaseUrl!));
   else
