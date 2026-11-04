@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
-  "functions": { "src/main.ts": { "maxDuration": 180 } },
   "crons": [{ "path": "/v1/maintenance/media", "schedule": "0 0 * * *" }]
 }
