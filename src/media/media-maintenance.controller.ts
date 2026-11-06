@@ -27,6 +27,8 @@ export class MediaMaintenanceController {
       !timingSafeEqual(actual, expected)
     )
       throw new UnauthorizedException();
+    await this.db.query(`DELETE FROM public_request_limits WHERE key_hash IN
+      (SELECT key_hash FROM public_request_limits WHERE expires_at<now() ORDER BY expires_at LIMIT 5000)`);
     if (this.config.mediaStorage !== 'vercel-blob') return { removed: 0 };
     return this.db.transaction(async (client) => {
       const expired = await client.query<{ id: string; staging_path: string }>(

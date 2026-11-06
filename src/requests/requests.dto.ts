@@ -61,3 +61,13 @@ export class ReviewRequestDto {
   @IsIn(['pending', 'contacted', 'closed'])
   status!: 'pending' | 'contacted' | 'closed';
 }
+
+export class TrackRequestDto {
+  @ApiProperty({ description: 'Mã ngắn 8 ký tự hoặc mã TL cũ' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @Matches(/^(?:[A-F0-9]{8}|TL-[A-F0-9]{8}(?:-[A-F0-9]{4}){3}-[A-F0-9]{12})$/)
+  code!: string;
+}

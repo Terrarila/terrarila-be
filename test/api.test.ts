@@ -117,7 +117,7 @@ beforeEach(async () => {
   // Only the disposable fixture owner bypasses append-only protection to reset each test.
   await sql.query('ALTER TABLE admin_audit_log DISABLE TRIGGER admin_audit_append_only');
   await sql.query(
-    'TRUNCATE auth_login_limits,design_requests,payments,invoices,orders,quotes,sessions,auth_challenges,users,admin_audit_log CASCADE',
+    'TRUNCATE public_request_limits,feedback,auth_login_limits,design_requests,payments,invoices,orders,quotes,sessions,auth_challenges,users,admin_audit_log CASCADE',
   );
   await sql.query('ALTER TABLE admin_audit_log ENABLE TRIGGER admin_audit_append_only');
   await sql.query(
@@ -1458,4 +1458,138 @@ test('admin reads unpublished content revisions without exposing it publicly', a
     .send(document.body.data)
     .expect(200);
   await request(server()).get('/v1/content/about').expect(200);
+});
+
+test('short request codes are stable and public tracking contains no personal information', async () => {
+  const key = randomUUID();
+  const created = await inquire(key).expect(201);
+  assert.match(created.body.number, /^[A-F0-9]{8}$/);
+  assert.equal((await inquire(key).expect(201)).body.number, created.body.number);
+  const track = (code: string) =>
+    request(server())
+      .post('/v1/design-requests/track')
+      .auth('c'.repeat(64), { type: 'bearer' })
+      .send({ code });
+  const found = await track(` ${created.body.number.toLowerCase()} `).expect(200);
+  assert.equal(found.body.status, 'pending');
+  assert.ok(found.body.selection.length > 0);
+  assert.deepEqual(
+    Object.keys(found.body).sort(),
+    ['number', 'status', 'selection', 'createdAt', 'updatedAt', 'events'].sort(),
+  );
+  assert.equal(found.body.id, undefined);
+  for (const field of ['0901234567', 'Khách kiểm thử', 'Thủ Đức', 'Bố cục rừng', guestToken])
+    assert.equal(JSON.stringify(found.body).includes(field), false);
+  const legacy = `TL-${randomUUID().toUpperCase()}`;
+  await sql.query('UPDATE design_requests SET number=$1 WHERE id=$2', [legacy, created.body.id]);
+  assert.equal((await track(legacy).expect(200)).body.number, created.body.number);
+  await track('FFFFFFFF').expect(404);
+  await request(server())
+    .post('/v1/design-requests/track')
+    .send({ code: created.body.number })
+    .expect(401);
+  await request(server())
+    .post('/v1/design-requests/track')
+    .auth('c'.repeat(64), { type: 'bearer' })
+    .send({ code: created.body.number, phone: '0901234567' })
+    .expect(400);
+});
+
+test('tracking history reflects admin updates atomically and stale writes do not append events', async () => {
+  const created = await inquire(randomUUID()).expect(201);
+  const admin = await login(true);
+  await request(server())
+    .patch(`/v1/admin/design-requests/${created.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ status: 'contacted' })
+    .expect(200);
+  await request(server())
+    .patch(`/v1/admin/design-requests/${created.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ status: 'closed' })
+    .expect(409);
+  await request(server())
+    .patch(`/v1/admin/design-requests/${created.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '2')
+    .send({ status: 'closed' })
+    .expect(200);
+  const result = await request(server())
+    .post('/v1/design-requests/track')
+    .auth('d'.repeat(64), { type: 'bearer' })
+    .send({ code: created.body.number })
+    .expect(200);
+  assert.equal(result.body.status, 'closed');
+  assert.deepEqual(
+    result.body.events.map((event: { status: string }) => event.status),
+    ['pending', 'contacted', 'closed'],
+  );
+  assert.equal(result.body.events[0].id, undefined);
+});
+
+test('tracking attempts are bounded across guest identities on the same IP', async () => {
+  for (let index = 0; index < 20; index++)
+    await request(server())
+      .post('/v1/design-requests/track')
+      .auth(index.toString(16).padStart(64, '0'), { type: 'bearer' })
+      .send({ code: 'FFFFFFFF' })
+      .expect(404);
+  await request(server())
+    .post('/v1/design-requests/track')
+    .auth('e'.repeat(64), { type: 'bearer' })
+    .send({ code: 'FFFFFFFF' })
+    .expect(429);
+});
+
+test('feedback validates, deduplicates retries and is readable only by admins', async () => {
+  const key = randomUUID();
+  const body = { email: '  CUSTOMER@EXAMPLE.COM  ', message: '  Mong trang tải ảnh nhanh hơn.  ' };
+  const submit = (payload: object = body, idempotency = key) =>
+    request(server())
+      .post('/v1/feedback')
+      .auth(guestToken, { type: 'bearer' })
+      .set('Idempotency-Key', idempotency)
+      .send(payload);
+  const saved = await submit().expect(201);
+  assert.deepEqual(Object.keys(saved.body), ['id']);
+  assert.equal((await submit().expect(201)).body.id, saved.body.id);
+  await submit({ ...body, message: 'Nội dung đã đổi' }).expect(409);
+  await submit({ ...body, email: 'invalid' }, randomUUID()).expect(400);
+  await submit({ ...body, message: '  ' }, randomUUID()).expect(400);
+  await submit({ ...body, extra: 'not allowed' }, randomUUID()).expect(400);
+  await request(server())
+    .post('/v1/feedback')
+    .set('Idempotency-Key', randomUUID())
+    .send(body)
+    .expect(401);
+  await request(server()).get('/v1/admin/feedback').expect(401);
+  const customer = await login();
+  await request(server())
+    .get('/v1/admin/feedback')
+    .auth(customer.token, { type: 'bearer' })
+    .expect(403);
+  const admin = await login(true);
+  const list = await request(server())
+    .get('/v1/admin/feedback')
+    .auth(admin.token, { type: 'bearer' })
+    .expect(200);
+  assert.equal(list.body.items.length, 1);
+  assert.equal(list.body.items[0].email, 'customer@example.com');
+  assert.equal(list.body.items[0].message, 'Mong trang tải ảnh nhanh hơn.');
+  assert.equal(list.body.items[0].guest_hash, undefined);
+});
+
+test('feedback write limits persist across instances and expired buckets can be reused', async () => {
+  const submit = () =>
+    request(server())
+      .post('/v1/feedback')
+      .auth(guestToken, { type: 'bearer' })
+      .set('Idempotency-Key', randomUUID())
+      .send({ email: 'a@example.com', message: 'Góp ý thử nghiệm' });
+  for (let index = 0; index < 5; index++) await submit().expect(201);
+  await submit().expect(429);
+  await sql.query("UPDATE public_request_limits SET expires_at=now()-interval '1 second'");
+  await submit().expect(201);
 });

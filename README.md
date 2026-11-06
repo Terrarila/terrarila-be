@@ -1,5 +1,7 @@
 # Petite Terre API
 
+Import dữ liệu cũ vào Neon đã migration: [NEON-DATA-IMPORT.md](docs/NEON-DATA-IMPORT.md).
+
 NestJS 12 + TypeScript (ESM), Node.js 24, PostgreSQL. Source nằm riêng trong `terrarila-be`; phục vụ API và tài nguyên `/assets` cho FE/admin.
 
 ## Chạy local

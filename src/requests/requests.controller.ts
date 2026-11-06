@@ -14,6 +14,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -30,7 +31,7 @@ import type { AuthenticatedRequest } from '../auth/session.guard.js';
 import { AdminGuard } from '../admin/admin.guard.js';
 import { PageQuery, parseRevision } from '../common/pagination.js';
 import { DesignRequestsService } from './requests.service.js';
-import { DesignRequestDto, ReviewRequestDto } from './requests.dto.js';
+import { DesignRequestDto, ReviewRequestDto, TrackRequestDto } from './requests.dto.js';
 function guest(value: string | undefined) {
   if (!value || !/^Bearer [a-f0-9]{64}$/.test(value)) throw new UnauthorizedException();
   return value.slice(7);
@@ -72,6 +73,14 @@ export class DesignRequestsController {
   ) {
     if (!key || !isUUID(key)) throw new BadRequestException('Idempotency-Key UUID required');
     return this.requests.create(guest(auth), key, input);
+  }
+  @Post('track')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Tra cứu bằng mã; chỉ trả trạng thái và snapshot vật liệu, không trả dữ liệu cá nhân',
+  })
+  track(@Headers('authorization') auth: string | undefined, @Body() input: TrackRequestDto) {
+    return this.requests.track(guest(auth), input);
   }
   @Get(':id')
   @ApiOperation({

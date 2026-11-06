@@ -2,19 +2,21 @@ import { Inject, Catch, HttpException, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { AuditService } from '../admin/audit.service.js';
 import { auditContext, hashedIp } from './audit-context.js';
 import { isUUID } from 'class-validator';
 
-export function requestContext(req: Request, res: Response, next: () => void) {
+export function requestContext(req: Request, res: Response, next: () => void, vercel = false) {
   const incoming = req.header('X-Request-Id');
   res.locals.requestId = incoming && isUUID(incoming) ? incoming : randomUUID();
   res.setHeader('X-Request-Id', res.locals.requestId as string);
   res.setHeader('Cache-Control', 'no-store');
-  auditContext.run(
-    { requestId: res.locals.requestId as string, ipHash: hashedIp(req.ip ?? 'unknown') },
-    next,
-  );
+  // Vercel's ipAddress helper uses its platform-provided x-real-ip header.
+  // Ignore forwarded headers on local/VPS requests unless that platform is selected.
+  const platformIp = vercel ? req.header('x-real-ip') : undefined;
+  const ip = platformIp && isIP(platformIp) ? platformIp : (req.ip ?? 'unknown');
+  auditContext.run({ requestId: res.locals.requestId as string, ipHash: hashedIp(ip) }, next);
 }
 
 @Catch()

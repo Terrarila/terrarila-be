@@ -5,14 +5,16 @@ import { ValidationPipe } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, static as serveStatic } from 'express';
-import type { ErrorRequestHandler } from 'express';
+import type { ErrorRequestHandler, Request, Response, NextFunction } from 'express';
 import { createSecurityHeaders } from './common/security-headers.js';
 import { AuditService } from './admin/audit.service.js';
 import { ApiExceptionFilter, requestContext } from './common/http.js';
 import type { AppConfig } from './common/config.js';
 
 export async function configureApp(app: INestApplication, config: AppConfig) {
-  app.use(requestContext);
+  app.use((req: Request, res: Response, next: NextFunction) =>
+    requestContext(req, res, next, config.vercel),
+  );
   app.use(app.get(Operations).middleware(config.logRequests));
   app.use(createSecurityHeaders());
   if (config.mediaStorage === 'vercel-blob')

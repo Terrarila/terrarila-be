@@ -1,4 +1,7 @@
 import { Operations } from './common/operations.js';
+import { PublicRateLimit } from './common/public-rate-limit.js';
+import { FeedbackController, AdminFeedbackController } from './feedback/feedback.controller.js';
+import { FeedbackService } from './feedback/feedback.service.js';
 import { OperationsController } from './admin/operations.controller.js';
 import { AuditController } from './admin/audit.controller.js';
 import { AuditService } from './admin/audit.service.js';
@@ -41,6 +44,8 @@ import type { AppConfig } from './common/config.js';
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    FeedbackController,
+    AdminFeedbackController,
     OperationsController,
     AuditController,
     MediaController,
@@ -58,6 +63,8 @@ import type { AppConfig } from './common/config.js';
     PublicPricingController,
   ],
   providers: [
+    PublicRateLimit,
+    FeedbackService,
     Operations,
     AuditService,
     MediaService,
