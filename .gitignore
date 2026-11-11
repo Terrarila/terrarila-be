@@ -41,3 +41,9 @@ backups/
 *.ptbackup.partial
 *.private.pem
 *.public.pem
+
+# Local validation reports and agent instructions
+VALIDATION.md
+validation.md
+AGENTS.md
+docs/FE-BE-OVERVIEW.md
