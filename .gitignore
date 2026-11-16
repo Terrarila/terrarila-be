@@ -3,7 +3,7 @@ dist/
 .test-dist/
 .env
 .env.*
-!.env.example
+.env.example
 coverage/
 .vercel/
 storage/assets/uploads/
@@ -43,6 +43,7 @@ backups/
 *.public.pem
 
 # Local validation reports and agent instructions
+/docs/**/*.md
 VALIDATION.md
 validation.md
 AGENTS.md

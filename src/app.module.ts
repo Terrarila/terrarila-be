@@ -38,12 +38,16 @@ import {
   PublicPricingController,
 } from './orders/orders.controller.js';
 import { OrdersService } from './orders/orders.service.js';
+import { MailgunMailer, NOTIFICATION_MAILER } from './notifications/mailgun.js';
+import { NotificationsService } from './notifications/notifications.service.js';
+import { NotificationsController } from './notifications/notifications.controller.js';
 import { CONFIG } from './common/config.js';
 import type { AppConfig } from './common/config.js';
 
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    NotificationsController,
     FeedbackController,
     AdminFeedbackController,
     OperationsController,
@@ -63,6 +67,8 @@ import type { AppConfig } from './common/config.js';
     PublicPricingController,
   ],
   providers: [
+    NotificationsService,
+    { provide: NOTIFICATION_MAILER, useClass: MailgunMailer },
     PublicRateLimit,
     FeedbackService,
     Operations,

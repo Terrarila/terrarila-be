@@ -11,6 +11,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { PublicRateLimit } from '../common/public-rate-limit.js';
 import { DatabaseService } from '../database/database.service.js';
 import { ConfigurationService } from '../configuration/configuration.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { decodeTimeCursor } from '../common/pagination.js';
 import type { PageQuery } from '../common/pagination.js';
 import type { DesignRequestDto, ReviewRequestDto, TrackRequestDto } from './requests.dto.js';
@@ -21,6 +22,7 @@ export class DesignRequestsService {
     @Inject(DatabaseService) private readonly db: DatabaseService,
     @Inject(ConfigurationService) private readonly configuration: ConfigurationService,
     @Inject(PublicRateLimit) private readonly limiter: PublicRateLimit,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
   async create(token: string, key: string, input: DesignRequestDto) {
     const body = {
@@ -49,7 +51,7 @@ export class DesignRequestsService {
     ).rows[0];
     if (saved) return replay(saved);
     const selected = await this.configuration.validate({ materialIds: body.materialIds });
-    return this.db.transaction(async (client) => {
+    const result = await this.db.transaction(async (client) => {
       // One guest submits serially; retries return the same persisted receipt even if stock changed.
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [guestHash]);
       const previous = (
@@ -112,8 +114,11 @@ export class DesignRequestsService {
         "INSERT INTO request_status_events(request_id,status) VALUES($1,'pending')",
         [id],
       );
+      await this.notifications.enqueue(client, 'design_request', id);
       return { id, number, status: 'pending' };
     });
+    await this.notifications.afterCommit('design_request', String(result.id));
+    return result;
   }
   async get(id: string, token: string) {
     const row = (

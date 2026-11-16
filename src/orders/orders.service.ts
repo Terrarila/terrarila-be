@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseService } from '../database/database.service.js';
 import type { SqlClient } from '../database/database.service.js';
 import { CatalogRepository } from '../catalog/catalog.repository.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { decodeTimeCursor } from '../common/pagination.js';
 import type { PageQuery } from '../common/pagination.js';
 import type {
@@ -66,6 +67,7 @@ export class OrdersService {
   constructor(
     @Inject(DatabaseService) private readonly db: DatabaseService,
     @Inject(CatalogRepository) private readonly catalog: CatalogRepository,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
   private async policy(client: SqlClient = this.db.client) {
     const policy = (
@@ -195,7 +197,7 @@ export class OrdersService {
       .update(JSON.stringify({ quoteId: input.quoteId, ...contact }))
       .digest('hex');
     try {
-      return await this.db.transaction(async (client) => {
+      const result = await this.db.transaction(async (client) => {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${userId}:${key}`]);
         const replay = (
           await client.query(
@@ -331,8 +333,11 @@ export class OrdersService {
             }),
           ],
         );
+        await this.notifications.enqueue(client, 'order', order.id);
         return order;
       });
+      await this.notifications.afterCommit('order', result.id);
+      return result;
     } catch (error) {
       if (sqlCode(error) === '23505')
         throw new ConflictException('Quote already ordered or idempotency key already used');

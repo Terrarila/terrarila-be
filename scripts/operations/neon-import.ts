@@ -38,6 +38,8 @@ const skipped = [
   'auth_login_limits',
   'media_upload_intents',
   'public_request_limits',
+  // Delivery state must never be replayed into another environment.
+  'email_notifications',
 ];
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const tableName = (name: string) => `public.${identifier(name)}`;
@@ -59,13 +61,13 @@ async function describe(client: ImportClient, label: 'SOURCE' | 'TARGET') {
   const expected = [...tables, ...skipped, 'schema_migrations'].sort();
   if (JSON.stringify(names) !== JSON.stringify(expected))
     throw new ImportError(
-      `${label} public tables differ. Missing: ${expected.filter((name) => !names.includes(name)).join(', ') || 'none'}. Unexpected: ${names.filter((name) => !expected.includes(name)).join(', ') || 'none'}. Apply migrations through 017 to ${label} first.`,
+      `${label} public tables differ. Missing: ${expected.filter((name) => !names.includes(name)).join(', ') || 'none'}. Unexpected: ${names.filter((name) => !expected.includes(name)).join(', ') || 'none'}. Apply migrations through 018 to ${label} first.`,
     );
   const migrations = (
     await client.query('SELECT name,checksum FROM public.schema_migrations ORDER BY name')
   ).rows;
-  if (migrations.length !== 17 || migrations.at(-1)?.name !== '017_tracking_feedback.sql')
-    throw new ImportError(`${label} must have migrations 001 through 017.`);
+  if (migrations.length !== 18 || migrations.at(-1)?.name !== '018_email_notifications.sql')
+    throw new ImportError(`${label} must have migrations 001 through 018.`);
   const columns = (
     await client.query<{
       table_name: string;

@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { loadMailgunConfig } from '../notifications/mailgun.config.js';
 export const CONFIG = Symbol('CONFIG');
 export type AppConfig = ReturnType<typeof loadConfig>;
 
@@ -81,6 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (!Number.isInteger(sessionTtlSeconds) || sessionTtlSeconds < 300 || sessionTtlSeconds > 604800)
     throw new Error('SESSION_TTL_SECONDS must be 300..604800');
   return {
+    mailgun: loadMailgunConfig(env),
     environment,
     vercel: Boolean(env.VERCEL),
     mediaStorage: mediaStorage as 'local' | 'vercel-blob',

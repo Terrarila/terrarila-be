@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
-  "crons": [{ "path": "/v1/maintenance/media", "schedule": "0 0 * * *" }]
+  "crons": [
+    { "path": "/v1/maintenance/media", "schedule": "0 0 * * *" },
+    { "path": "/v1/maintenance/notifications", "schedule": "15 0 * * *" }
+  ]
 }

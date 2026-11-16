@@ -20,6 +20,24 @@ import { SQL, createPool } from '../src/database/database.service.js';
 import type { SqlClient } from '../src/database/database.service.js';
 import { GOOGLE_VERIFY, createGoogleVerifier } from '../src/auth/google.js';
 import { seedCatalog } from '../scripts/seed.js';
+import { MailDeliveryError, NOTIFICATION_MAILER } from '../src/notifications/mailgun.js';
+import type { MailMessage } from '../src/notifications/mailgun.js';
+import { loadMailgunConfig } from '../src/notifications/mailgun.config.js';
+import { NotificationsService } from '../src/notifications/notifications.service.js';
+
+const deliveredNotifications: MailMessage[] = [];
+let notificationFailure: MailDeliveryError | null = null;
+const enableNotifications = () => {
+  config.mailgun = loadMailgunConfig({
+    MAILGUN_ENABLED: 'true',
+    MAILGUN_DOMAIN: 'mg.example.com',
+    MAILGUN_REGION: 'EU',
+    MAILGUN_API_KEY: 'fixture-only',
+    MAILGUN_FROM: 'shop@mg.example.com',
+    MAILGUN_NOTIFY_TO: 'owner@example.com',
+    ADMIN_APP_URL: 'https://admin.example.com',
+  });
+};
 
 const config = loadConfig({
   NODE_ENV: 'test',
@@ -102,6 +120,14 @@ before(async () => {
     .useValue(config)
     .overrideProvider(SQL)
     .useValue(sql)
+    .overrideProvider(NOTIFICATION_MAILER)
+    .useValue({
+      async send(message: MailMessage) {
+        if (notificationFailure) throw notificationFailure;
+        deliveredNotifications.push(message);
+        return '<fixture@mg.example.com>';
+      },
+    })
     .overrideProvider(GOOGLE_VERIFY)
     .useValue(createGoogleVerifier(config, createLocalJWKSet({ keys: [publicKey] })))
     .compile();
@@ -114,6 +140,9 @@ after(async () => {
   await rm(config.mediaRoot, { recursive: true, force: true });
 });
 beforeEach(async () => {
+  config.mailgun = null;
+  deliveredNotifications.length = 0;
+  notificationFailure = null;
   // Only the disposable fixture owner bypasses append-only protection to reset each test.
   await sql.query('ALTER TABLE admin_audit_log DISABLE TRIGGER admin_audit_append_only');
   await sql.query(
@@ -127,6 +156,137 @@ beforeEach(async () => {
   await sql.query(
     'UPDATE pricing_policy SET labour_bps=NULL,deposit_bps=NULL,quantity_mode=NULL,shipping_mode=NULL,revision=1',
   );
+});
+
+test('new orders and inquiries notify once after save; disabled mode and rejected input do not enqueue', async () => {
+  await inquire(randomUUID()).expect(201);
+  assert.equal((await sql.query('SELECT id FROM email_notifications')).rows.length, 0);
+  enableNotifications();
+  const key = randomUUID();
+  const inquiry = await inquire(key).expect(201);
+  await inquire(key).expect(201);
+  await inquire(key, { ...guestInput(), note: 'Changed content' }).expect(409);
+  await inquire(randomUUID(), { ...guestInput(), materialIds: [randomUUID()] }).expect(400);
+  assert.equal(deliveredNotifications.length, 1);
+  assert.match(deliveredNotifications[0]!.subject, new RegExp(inquiry.body.number));
+  assert.match(deliveredNotifications[0]!.text, /0901234567/);
+  assert.match(deliveredNotifications[0]!.text, /chưa phải đơn hàng/);
+
+  const admin = await login(true);
+  const buyer = await login();
+  await configurePricing(admin.token);
+  const priced = await quote(buyer.token).expect(201);
+  const orderKey = randomUUID();
+  const sendOrder = () =>
+    request(server())
+      .post('/v1/orders')
+      .auth(buyer.token, { type: 'bearer' })
+      .set('Idempotency-Key', orderKey)
+      .send(orderInput(priced.body.id));
+  const order = await sendOrder().expect(201);
+  await sendOrder().expect(201);
+  assert.equal(deliveredNotifications.length, 2);
+  assert.match(deliveredNotifications[1]!.text, new RegExp(`/orders/${order.body.id}`));
+  assert.match(deliveredNotifications[1]!.text, /không xác nhận khách đã thanh toán/);
+  assert.deepEqual(
+    (await sql.query('SELECT status,attempts FROM email_notifications ORDER BY created_at')).rows,
+    [
+      { status: 'accepted', attempts: 1 },
+      { status: 'accepted', attempts: 1 },
+    ],
+  );
+});
+
+test('Mailgun failure preserves receipts and retries due jobs; permanent errors stop', async () => {
+  enableNotifications();
+  notificationFailure = new MailDeliveryError('http_429', true);
+  const inquiry = await inquire(randomUUID()).expect(201);
+  assert.ok(
+    (await sql.query('SELECT id FROM design_requests WHERE id=$1', [inquiry.body.id])).rows[0],
+  );
+  let row = (await sql.query('SELECT * FROM email_notifications')).rows[0]!;
+  assert.equal(row.status, 'pending');
+  assert.equal(row.attempts, 1);
+  const notifications = app.get(NotificationsService);
+  assert.equal((await notifications.drain()).retried, 0); // Backoff prevents immediate replay.
+  await sql.query("UPDATE email_notifications SET next_attempt_at=now()-interval '1 second'");
+  notificationFailure = null;
+  assert.equal((await notifications.drain()).accepted, 1);
+  assert.equal((await notifications.drain()).accepted, 0);
+  assert.equal(deliveredNotifications.length, 1);
+
+  notificationFailure = new MailDeliveryError('http_401', false);
+  await inquire(randomUUID()).expect(201);
+  row = (await sql.query("SELECT * FROM email_notifications WHERE status='failed'")).rows[0]!;
+  assert.equal(row.attempts, 1);
+  assert.equal(row.last_error, 'http_401');
+  assert.equal((await notifications.drain()).failed, 0);
+});
+
+test('notification leases exclude simultaneous workers, recover crashes and cap attempts', async () => {
+  enableNotifications();
+  notificationFailure = new MailDeliveryError('network_or_timeout', true);
+  await inquire(randomUUID()).expect(201);
+  await sql.query("UPDATE email_notifications SET next_attempt_at=now()-interval '1 second'");
+  const notifications = app.get(NotificationsService);
+  notificationFailure = null;
+  const jobs = await Promise.all([notifications.drain(), notifications.drain()]);
+  assert.equal(
+    jobs.reduce((sum, job) => sum + job.accepted, 0),
+    1,
+  );
+  assert.equal(deliveredNotifications.length, 1);
+  await sql.query(
+    "UPDATE email_notifications SET status='sending',attempts=4,lease_token=gen_random_uuid(),lease_until=now()-interval '1 second'",
+  );
+  notificationFailure = new MailDeliveryError('http_500', true);
+  assert.equal((await notifications.drain()).failed, 1);
+  assert.equal((await sql.query('SELECT attempts FROM email_notifications')).rows[0]!.attempts, 5);
+  await sql.query(
+    "UPDATE email_notifications SET status='sending',lease_until=now()-interval '1 second'",
+  );
+  await notifications.drain();
+  assert.equal(
+    (await sql.query('SELECT status FROM email_notifications')).rows[0]!.status,
+    'failed',
+  );
+});
+
+test('outbox rolls back with business data and maintenance requires the cron secret', async () => {
+  enableNotifications();
+  const notifications = app.get(NotificationsService);
+  await assert.rejects(
+    sql.transaction!(async (client) => {
+      const row = (
+        await client.query(
+          `INSERT INTO design_requests(number,tracking_code,guest_hash,idempotency_key,request_hash,selection,contact)
+      VALUES('ABCDEF01','ABCDEF01','fixture',$1,'fixture','[]','{}') RETURNING id`,
+          [randomUUID()],
+        )
+      ).rows[0]!;
+      await notifications.enqueue(client, 'design_request', String(row.id));
+      throw new Error('fixture rollback');
+    }),
+    /fixture rollback/,
+  );
+  assert.equal((await sql.query('SELECT id FROM email_notifications')).rows.length, 0);
+  assert.equal((await sql.query('SELECT id FROM design_requests')).rows.length, 0);
+  await request(server()).get('/v1/maintenance/notifications').expect(401);
+  config.cronSecret = 'fixture-cron-secret';
+  try {
+    await request(server())
+      .get('/v1/maintenance/notifications')
+      .auth('wrong', { type: 'bearer' })
+      .expect(401);
+    const result = await request(server())
+      .get('/v1/maintenance/notifications')
+      .auth(config.cronSecret, { type: 'bearer' })
+      .expect(200);
+    assert.equal(result.headers['cache-control'], 'no-store');
+    assert.equal(result.body.accepted, 0);
+  } finally {
+    config.cronSecret = undefined;
+  }
 });
 const server = () => app.getHttpServer();
 const ids = (category: string) =>
