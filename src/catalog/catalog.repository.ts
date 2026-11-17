@@ -91,11 +91,11 @@ export class CatalogRepository {
       UNION ALL
       SELECT id,slug,name,description,images,sort_order,published,revision,
         highlight_image_url,id AS source_product_id
-      FROM products WHERE published
+      FROM products WHERE published AND show_in_portfolio
     ) AS portfolio`;
     const price =
       kind === 'products'
-        ? ',price_vnd AS "priceVnd",availability,highlight_image_url AS "highlightImageUrl"'
+        ? ',price_vnd AS "priceVnd",availability,highlight_image_url AS "highlightImageUrl",show_in_portfolio AS "showInPortfolio"'
         : ',highlight_image_url AS "highlightImageUrl",source_product_id AS "sourceProductId"';
     const rows = (
       await this.db.query<{ id: string; sortOrder: number }>(

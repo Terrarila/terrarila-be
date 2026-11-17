@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   Headers,
   Inject,
@@ -92,6 +93,13 @@ export class PortfolioDto {
   sortOrder?: number;
 }
 export class ProductDto extends PortfolioDto {
+  @ApiPropertyOptional({
+    description: 'Show this product in synced Portfolio when published',
+    default: true,
+  })
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsBoolean()
+  showInPortfolio?: boolean;
   @ApiPropertyOptional({ type: String, nullable: true })
   @IsOptional()
   @IsString()
@@ -160,6 +168,33 @@ export class AdminCatalogController {
   }
   @Post('materials') material(@Body() input: CreateMaterialDto, @Req() req: AuthenticatedRequest) {
     return this.writes.createMaterial(input, req.user.id);
+  }
+  @Delete('materials/:id')
+  @ApiHeader({ name: 'If-Match', required: true })
+  deleteMaterial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('if-match') revision: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.writes.remove('materials', id, parseRevision(revision), req.user.id);
+  }
+  @Delete('products/:id')
+  @ApiHeader({ name: 'If-Match', required: true })
+  deleteProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('if-match') revision: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.writes.remove('products', id, parseRevision(revision), req.user.id);
+  }
+  @Delete('portfolio/:id')
+  @ApiHeader({ name: 'If-Match', required: true })
+  deletePortfolio(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('if-match') revision: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.writes.remove('portfolio_entries', id, parseRevision(revision), req.user.id);
   }
   @Get('products') products(@Query() query: PageQuery) {
     return this.catalog.products(query, 'products', true);

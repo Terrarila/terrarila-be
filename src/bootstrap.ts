@@ -59,7 +59,7 @@ export async function configureApp(app: INestApplication, config: AppConfig) {
   app.enableCors({
     origin: config.corsOrigins,
     credentials: false,
-    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',

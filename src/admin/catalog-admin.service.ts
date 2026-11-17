@@ -14,6 +14,7 @@ const fields = {
     sortOrder: 'sort_order',
   },
   products: {
+    showInPortfolio: 'show_in_portfolio',
     highlightImageUrl: 'highlight_image_url',
     name: 'name',
     description: 'description',
@@ -46,6 +47,64 @@ export function catalogWriteError(error: unknown): never {
 @Injectable()
 export class CatalogAdminService {
   constructor(@Inject(DatabaseService) private readonly db: DatabaseService) {}
+  async remove(table: CatalogEntity, id: string, revision: number, actor: string) {
+    try {
+      return await this.db.transaction(async (client) => {
+        const previous = (
+          await client.query<{ revision: number; data: unknown }>(
+            `SELECT revision,to_jsonb(t) AS data FROM ${table} t WHERE id=$1 FOR UPDATE`,
+            [id],
+          )
+        ).rows[0];
+        if (!previous && table === 'portfolio_entries') {
+          const product = (
+            await client.query<{ revision: number; data: unknown }>(
+              'SELECT revision,to_jsonb(p) AS data FROM products p WHERE id=$1 AND published AND show_in_portfolio FOR UPDATE',
+              [id],
+            )
+          ).rows[0];
+          if (!product || product.revision !== revision)
+            throw new ConflictException(
+              'Catalog revision changed or item missing; reload before deleting',
+            );
+          await client.query(
+            'UPDATE products SET show_in_portfolio=false,revision=revision+1,updated_at=now() WHERE id=$1',
+            [id],
+          );
+          await client.query(
+            'INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,$2,$3,$4::jsonb)',
+            [
+              actor,
+              'products.portfolio_removed',
+              id,
+              auditChanges({ showInPortfolio: false }, product.data),
+            ],
+          );
+          return { id, removed: true };
+        }
+        if (!previous || previous.revision !== revision)
+          throw new ConflictException(
+            'Catalog revision changed or item missing; reload before deleting',
+          );
+        await client.query(`DELETE FROM ${table} WHERE id=$1`, [id]);
+        await client.query(
+          'INSERT INTO admin_audit_log(actor_subject,action,entity_id,changes) VALUES($1,$2,$3,$4::jsonb)',
+          [actor, `${table}.deleted`, id, auditChanges({ deleted: true }, previous.data)],
+        );
+        return { id, deleted: true };
+      });
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
+      if (code === '23503' || code === '23001')
+        throw new ConflictException({
+          code: 'CATALOG_IN_USE',
+          message:
+            'Vật liệu đang được dùng trong mẫu thiết kế hoặc còn size con. Hãy gỡ khỏi mẫu và xoá các size con trước, hoặc chuyển thành bản nháp.',
+        });
+      throw error;
+    }
+  }
   async update(table: CatalogEntity, id: string, revision: number, input: object, actor: string) {
     const mapping: Record<string, string> = fields[table];
     const entries = Object.entries(input).filter(
@@ -88,6 +147,7 @@ export class CatalogAdminService {
       description?: string;
       images: object[];
       highlightImageUrl?: string | null;
+      showInPortfolio?: boolean;
       priceVnd?: number | null;
       availability?: string;
       published?: boolean;
@@ -105,13 +165,17 @@ export class CatalogAdminService {
           input.published ?? false,
           input.sortOrder ?? 0,
         ];
-        const extra = table === 'products' ? ',price_vnd,availability,highlight_image_url' : '';
-        const placeholders = table === 'products' ? ',$7,$8,$9' : '';
+        const extra =
+          table === 'products'
+            ? ',price_vnd,availability,highlight_image_url,show_in_portfolio'
+            : '';
+        const placeholders = table === 'products' ? ',$7,$8,$9,$10' : '';
         if (table === 'products')
           values.push(
             input.priceVnd ?? null,
             input.availability ?? 'inquiry',
             input.highlightImageUrl ?? null,
+            input.showInPortfolio ?? true,
           );
         const row = (
           await client.query(

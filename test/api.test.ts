@@ -350,6 +350,306 @@ function quote(token: string, mossCount = 3) {
       })),
     });
 }
+
+test('catalog DELETE enforces admin, UUID and revision, removes rows and audits the previous record', async () => {
+  const admin = await login(true);
+  const buyer = await login();
+  for (const resource of ['materials', 'products', 'portfolio']) {
+    const input =
+      resource === 'materials'
+        ? {
+            category: 'moss',
+            legacyId: 'delete-fixture',
+            slug: 'delete-fixture',
+            name: 'Delete fixture',
+          }
+        : {
+            name: 'Delete fixture',
+            slug: `delete-${resource}`,
+            images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+            published: true,
+          };
+    const created = await request(server())
+      .post(`/v1/admin/${resource}`)
+      .auth(admin.token, { type: 'bearer' })
+      .send(input)
+      .expect(201);
+    const path = `/v1/admin/${resource}/${created.body.id}`;
+    await request(server()).delete(path).set('If-Match', '1').expect(401);
+    await request(server())
+      .delete(path)
+      .auth(buyer.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .expect(403);
+    await request(server()).delete(path).auth(admin.token, { type: 'bearer' }).expect(400);
+    await request(server())
+      .delete(`/v1/admin/${resource}/invalid`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .expect(400);
+    await request(server())
+      .delete(path)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '2')
+      .expect(409);
+    const table = resource === 'portfolio' ? 'portfolio_entries' : resource;
+    assert.equal(
+      (await sql.query(`SELECT id FROM ${table} WHERE id=$1`, [created.body.id])).rows.length,
+      1,
+    );
+    await request(server())
+      .delete(path)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .expect(200);
+    assert.equal(
+      (await sql.query(`SELECT id FROM ${table} WHERE id=$1`, [created.body.id])).rows.length,
+      0,
+    );
+    const audit = (
+      await sql.query(
+        'SELECT actor_subject,changes FROM admin_audit_log WHERE entity_id=$1 AND action=$2',
+        [created.body.id, `${table}.deleted`],
+      )
+    ).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.actor_subject, admin.userId);
+    assert.equal(audit[0]!.changes._before.name, input.name);
+    await request(server())
+      .delete(path)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .expect(409);
+    assert.equal(
+      (
+        await sql.query('SELECT id FROM admin_audit_log WHERE entity_id=$1 AND action=$2', [
+          created.body.id,
+          `${table}.deleted`,
+        ])
+      ).rows.length,
+      1,
+    );
+  }
+  const preflight = await request(server())
+    .options('/v1/admin/products/fixture')
+    .set('Origin', 'http://localhost:3000')
+    .set('Access-Control-Request-Method', 'DELETE')
+    .set('Access-Control-Request-Headers', 'Authorization,If-Match')
+    .expect(204);
+  assert.match(String(preflight.headers['access-control-allow-methods']), /DELETE/);
+});
+
+test('material DELETE blocks linked presets and child sizes without deleting dependent data', async () => {
+  const admin = await login(true);
+  const parent = (
+    await sql.query(
+      `INSERT INTO materials(category_id,legacy_id,slug,name)
+    SELECT id,'delete-parent','delete-parent','Parent' FROM material_categories WHERE code='glass' RETURNING id`,
+      [],
+    )
+  ).rows[0]!;
+  const child = (
+    await sql.query(
+      `INSERT INTO materials(category_id,legacy_id,slug,name,parent_material_id,size_label)
+    SELECT category_id,'delete-child','delete-child','Child',id,'10x10' FROM materials WHERE id=$1 RETURNING id`,
+      [parent.id],
+    )
+  ).rows[0]!;
+  const remove = (id: string) =>
+    request(server())
+      .delete(`/v1/admin/materials/${id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1');
+  const blocked = await remove(parent.id).expect(409);
+  assert.equal(blocked.body.code, 'CATALOG_IN_USE');
+  assert.equal(
+    (await sql.query('SELECT id FROM materials WHERE id=ANY($1::uuid[])', [[parent.id, child.id]]))
+      .rows.length,
+    2,
+  );
+  const preset = (
+    await sql.query(
+      "INSERT INTO design_presets(slug,name,image_url) VALUES('delete-preset','Fixture','/assets/fixture.webp') RETURNING id",
+    )
+  ).rows[0]!;
+  await sql.query('INSERT INTO design_preset_materials(preset_id,material_id) VALUES($1,$2)', [
+    preset.id,
+    child.id,
+  ]);
+  await remove(child.id).expect(409);
+  assert.equal(
+    (
+      await sql.query(
+        'SELECT id FROM admin_audit_log WHERE action=$1 AND entity_id=ANY($2::uuid[])',
+        ['materials.deleted', [parent.id, child.id]],
+      )
+    ).rows.length,
+    0,
+  );
+  await sql.query('DELETE FROM design_presets WHERE id=$1', [preset.id]);
+  await remove(child.id).expect(200);
+  await remove(parent.id).expect(200);
+});
+
+test('deleting a product removes its synced portfolio entry while preserving saved order and invoice snapshots', async () => {
+  const admin = await login(true);
+  const buyer = await login();
+  await configurePricing(admin.token);
+  const product = await request(server())
+    .post('/v1/admin/products')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Historical product',
+      slug: 'historical-delete',
+      images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+      priceVnd: 150000,
+      availability: 'available',
+      published: true,
+    })
+    .expect(201);
+  const quote = await request(server())
+    .post('/v1/quotes')
+    .auth(buyer.token, { type: 'bearer' })
+    .send({ kind: 'product', productId: product.body.id, quantity: 1 })
+    .expect(201);
+  const order = await request(server())
+    .post('/v1/orders')
+    .auth(buyer.token, { type: 'bearer' })
+    .set('Idempotency-Key', randomUUID())
+    .send(orderInput(quote.body.id))
+    .expect(201);
+  const before = await request(server())
+    .get(`/v1/orders/${order.body.id}/invoice`)
+    .auth(buyer.token, { type: 'bearer' })
+    .expect(200);
+  await request(server())
+    .delete(`/v1/admin/products/${product.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .expect(200);
+  const portfolio = await request(server()).get('/v1/portfolio?limit=100').expect(200);
+  assert.equal(
+    portfolio.body.items.some((row: { id: string }) => row.id === product.body.id),
+    false,
+  );
+  await request(server()).get('/v1/products/historical-delete').expect(404);
+  const after = await request(server())
+    .get(`/v1/orders/${order.body.id}/invoice`)
+    .auth(buyer.token, { type: 'bearer' })
+    .expect(200);
+  assert.deepEqual(after.body.snapshot, before.body.snapshot);
+  await request(server())
+    .get(`/v1/orders/${order.body.id}`)
+    .auth(buyer.token, { type: 'bearer' })
+    .expect(200);
+});
+
+test('catalog deletion rolls back when audit insertion fails', async () => {
+  const admin = await login(true);
+  const product = await request(server())
+    .post('/v1/admin/products')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Rollback fixture',
+      slug: 'delete-rollback',
+      images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+    })
+    .expect(201);
+  await sql.query(`CREATE FUNCTION reject_delete_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.action='products.deleted' THEN RAISE EXCEPTION 'fixture rejection'; END IF; RETURN NEW; END $$`);
+  await sql.query(
+    'CREATE TRIGGER reject_delete_audit BEFORE INSERT ON admin_audit_log FOR EACH ROW EXECUTE FUNCTION reject_delete_audit()',
+  );
+  try {
+    await request(server())
+      .delete(`/v1/admin/products/${product.body.id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .expect(500);
+    assert.equal(
+      (await sql.query('SELECT id FROM products WHERE id=$1', [product.body.id])).rows.length,
+      1,
+    );
+  } finally {
+    await sql.query('DROP TRIGGER reject_delete_audit ON admin_audit_log');
+    await sql.query('DROP FUNCTION reject_delete_audit()');
+    await sql.query('DELETE FROM products WHERE id=$1', [product.body.id]);
+  }
+});
+
+test('removing a synced Portfolio item preserves its product, stays removed after edits, and can be restored explicitly', async () => {
+  const admin = await login(true);
+  const product = await request(server())
+    .post('/v1/admin/products')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Keep source product',
+      slug: 'keep-source-product',
+      images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+      priceVnd: 150000,
+      availability: 'available',
+      published: true,
+    })
+    .expect(201);
+  const id = product.body.id;
+  const remove = (revision: string) =>
+    request(server())
+      .delete(`/v1/admin/portfolio/${id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', revision);
+  await remove('2').expect(409);
+  await remove('1').expect(200);
+  const source = await request(server()).get('/v1/products/keep-source-product').expect(200);
+  assert.equal(source.body.id, id);
+  let stored = (
+    await sql.query('SELECT revision,published,show_in_portfolio FROM products WHERE id=$1', [id])
+  ).rows[0]!;
+  assert.equal(stored.published, true);
+  assert.equal(stored.show_in_portfolio, false);
+  assert.equal(stored.revision, 2);
+  for (const path of ['/v1/portfolio?limit=100', '/v1/admin/portfolio?limit=100']) {
+    const response = await request(server())
+      .get(path)
+      .auth(admin.token, { type: 'bearer' })
+      .expect(200);
+    assert.equal(
+      response.body.items.some((row: { id: string }) => row.id === id),
+      false,
+    );
+  }
+  await request(server())
+    .patch(`/v1/admin/products/${id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '2')
+    .send({ name: 'Edited source product' })
+    .expect(200);
+  stored = (await sql.query('SELECT show_in_portfolio FROM products WHERE id=$1', [id])).rows[0]!;
+  assert.equal(stored.show_in_portfolio, false);
+  const audit = (
+    await sql.query(
+      "SELECT changes FROM admin_audit_log WHERE entity_id=$1 AND action='products.portfolio_removed'",
+      [id],
+    )
+  ).rows;
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0]!.changes._before.show_in_portfolio, true);
+  await request(server())
+    .patch(`/v1/admin/products/${id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '3')
+    .send({ showInPortfolio: true })
+    .expect(200);
+  const restored = await request(server()).get('/v1/portfolio?limit=100').expect(200);
+  assert.equal(
+    restored.body.items.some((row: { id: string }) => row.id === id),
+    true,
+  );
+  await request(server())
+    .delete(`/v1/admin/products/${id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '4')
+    .expect(200);
+});
 const orderInput = (quoteId: string) => ({
   quoteId,
   recipientName: 'Test customer',
