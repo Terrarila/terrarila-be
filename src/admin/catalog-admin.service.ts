@@ -4,6 +4,8 @@ import { DatabaseService } from '../database/database.service.js';
 
 const fields = {
   materials: {
+    purchasePriceVnd: 'purchase_price_vnd',
+    purchaseUnit: 'purchase_unit',
     name: 'name',
     description: 'description',
     imageUrl: 'image_url',
@@ -40,7 +42,7 @@ export function catalogWriteError(error: unknown): never {
   if (code === '23505') throw new ConflictException('Duplicate slug or catalog identifier');
   if (code === '23514' || code === '23502')
     throw new BadRequestException(
-      'Invalid catalog values; a material price requires a non-empty unit',
+      'Invalid catalog values; material sale and purchase prices require their respective non-empty units',
     );
   throw error;
 }
@@ -195,6 +197,8 @@ export class CatalogAdminService {
   }
   async createMaterial(
     input: {
+      purchasePriceVnd?: number | null;
+      purchaseUnit?: string | null;
       category: string;
       legacyId: string;
       slug: string;
@@ -217,7 +221,7 @@ export class CatalogAdminService {
         if (!category) throw new BadRequestException('Material category not found');
         const row = (
           await client.query(
-            `INSERT INTO materials(category_id,legacy_id,slug,name,description,image_url,price_vnd,unit,availability,published,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,revision`,
+            `INSERT INTO materials(category_id,legacy_id,slug,name,description,image_url,price_vnd,unit,availability,published,sort_order,purchase_price_vnd,purchase_unit) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,revision`,
             [
               category.id,
               input.legacyId,
@@ -230,6 +234,8 @@ export class CatalogAdminService {
               input.availability ?? 'inquiry',
               input.published ?? false,
               input.sortOrder ?? 0,
+              input.purchasePriceVnd ?? null,
+              input.purchaseUnit ?? null,
             ],
           )
         ).rows[0]!;

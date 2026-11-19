@@ -53,6 +53,28 @@ export class UpdateMaterialDto {
   @Min(0)
   @Max(2147483647)
   priceVnd?: number | null;
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    minimum: 0,
+    maximum: 2147483647,
+    description: 'Admin-only purchase price in VND',
+  })
+  @ValidateIf((_object, value: unknown) => value !== undefined && value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(2147483647)
+  purchasePriceVnd?: number | null;
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Admin-only purchase unit, e.g. bag 500g or lot of 10',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  purchaseUnit?: string | null;
   @ApiPropertyOptional({ type: String, nullable: true })
   @IsOptional()
   @IsString()

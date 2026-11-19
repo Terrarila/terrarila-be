@@ -65,7 +65,7 @@ export class CatalogRepository {
     const cursor = decodeCursor(query.cursor);
     const rows = (
       await this.db.query<MaterialRow>(
-        `SELECT ${materialColumns} FROM materials m JOIN material_categories c ON c.id=m.category_id
+        `SELECT ${materialColumns}${includeDraft ? ',m.purchase_price_vnd AS "purchasePriceVnd",m.purchase_unit AS "purchaseUnit"' : ''} FROM materials m JOIN material_categories c ON c.id=m.category_id
       WHERE (m.published OR $5) AND (c.active OR $5) AND (m.parent_material_id IS NULL OR $5) AND ($1::text IS NULL OR c.code=$1)
       AND ($2::int IS NULL OR (m.sort_order,m.id)>($2::int,$3::uuid))
       ORDER BY m.sort_order,m.id LIMIT $4`,

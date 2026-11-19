@@ -48,3 +48,10 @@ VALIDATION.md
 validation.md
 AGENTS.md
 docs/FE-BE-OVERVIEW.md
+
+# Additional local secrets, database archives and HTTP captures
+*.pgdump
+*.pgdump.enc
+.envrc
+.direnv/
+*.har

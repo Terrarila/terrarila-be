@@ -657,6 +657,154 @@ const orderInput = (quoteId: string) => ({
   fulfillment: 'pickup',
 });
 
+function assertNoPurchasePrice(value: unknown) {
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value)) {
+    assert.notEqual(key, 'purchasePriceVnd');
+    assert.notEqual(key, 'purchase_price_vnd');
+    assert.notEqual(key, 'purchaseUnit');
+    assert.notEqual(key, 'purchase_unit');
+    assertNoPurchasePrice(child);
+  }
+}
+
+test('material purchase prices are nullable, validated, revision-protected and restricted to admin catalog responses', async () => {
+  const admin = await login(true);
+  const customer = await login();
+  const input = {
+    category: 'moss',
+    legacyId: 'private-cost-fixture',
+    slug: 'private-cost-fixture',
+    name: 'Private cost fixture',
+    unit: 'phần',
+    priceVnd: 100000,
+    purchasePriceVnd: 61729,
+    purchaseUnit: 'túi 500g',
+    published: true,
+  };
+  await request(server()).post('/v1/admin/materials').send(input).expect(401);
+  await request(server())
+    .post('/v1/admin/materials')
+    .auth(customer.token, { type: 'bearer' })
+    .send(input)
+    .expect(403);
+  const created = await request(server())
+    .post('/v1/admin/materials')
+    .auth(admin.token, { type: 'bearer' })
+    .send(input)
+    .expect(201);
+  const id = created.body.id;
+  const adminList = () =>
+    request(server()).get('/v1/admin/materials?limit=100').auth(admin.token, { type: 'bearer' });
+  const patch = (body: object, revision = '1') =>
+    request(server())
+      .patch(`/v1/admin/materials/${id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', revision)
+      .send(body);
+  try {
+    await request(server()).get('/v1/admin/materials').expect(401);
+    await request(server())
+      .get('/v1/admin/materials')
+      .auth(customer.token, { type: 'bearer' })
+      .expect(403);
+    let item = (await adminList().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === id,
+    );
+    assert.equal(item.purchasePriceVnd, input.purchasePriceVnd);
+    assert.equal(item.purchaseUnit, input.purchaseUnit);
+    await patch({ purchaseUnit: null }).expect(400);
+    await patch({ purchaseUnit: '   ' }).expect(400);
+    await patch({ purchaseUnit: 'x'.repeat(81) }).expect(400);
+    assert.equal(item.priceVnd, input.priceVnd);
+    for (const purchasePriceVnd of [-1, 1.5, '1000', 2147483648])
+      await patch({ purchasePriceVnd }).expect(400);
+    await request(server())
+      .patch(`/v1/admin/materials/${id}`)
+      .auth(customer.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .send({ purchasePriceVnd: 1 })
+      .expect(403);
+    await patch({ purchasePriceVnd: 0 }).expect(200);
+    await patch({ purchasePriceVnd: 3 }).expect(409);
+    item = (await adminList().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === id,
+    );
+    assert.equal(item.purchasePriceVnd, 0);
+    await patch({ purchasePriceVnd: null }, '2').expect(200);
+    item = (await adminList().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === id,
+    );
+    assert.equal(item.purchasePriceVnd, null);
+    assert.equal(item.priceVnd, input.priceVnd);
+    const publicList = await request(server()).get('/v1/materials?limit=100').expect(200);
+    assertNoPurchasePrice(publicList.body);
+    assertNoPurchasePrice(
+      (
+        await request(server())
+          .get('/v1/materials?limit=100')
+          .auth(admin.token, { type: 'bearer' })
+          .expect(200)
+      ).body,
+    );
+  } finally {
+    await sql.query('DELETE FROM materials WHERE id=$1', [id]);
+  }
+});
+
+test('purchase prices never leak into size details, validation, presets, templates, quotes or saved order snapshots', async () => {
+  const admin = await login(true);
+  const customer = await login();
+  await configurePricing(admin.token);
+  const chosen = [ids('glass')[0]!, ids('moss')[0]!];
+  await sql.query(
+    "UPDATE materials SET purchase_price_vnd=61729,purchase_unit='túi 500g' WHERE id=ANY($1::uuid[])",
+    [chosen],
+  );
+  try {
+    for (const path of [
+      '/v1/materials?limit=100',
+      '/v1/design-presets?limit=100',
+      '/v1/portfolio-templates?limit=100',
+    ]) {
+      assertNoPurchasePrice((await request(server()).get(path).expect(200)).body);
+    }
+    const valid = await request(server())
+      .post('/v1/configurations/validate')
+      .send({ materialIds: chosen })
+      .expect(200);
+    assertNoPurchasePrice(valid.body);
+    const priced = await quote(customer.token).expect(201);
+    assertNoPurchasePrice(priced.body);
+    const order = await request(server())
+      .post('/v1/orders')
+      .auth(customer.token, { type: 'bearer' })
+      .set('Idempotency-Key', randomUUID())
+      .send(orderInput(priced.body.id))
+      .expect(201);
+    assertNoPurchasePrice(
+      (
+        await request(server())
+          .get(`/v1/orders/${order.body.id}`)
+          .auth(customer.token, { type: 'bearer' })
+          .expect(200)
+      ).body,
+    );
+    assertNoPurchasePrice(
+      (
+        await request(server())
+          .get(`/v1/orders/${order.body.id}/invoice`)
+          .auth(customer.token, { type: 'bearer' })
+          .expect(200)
+      ).body,
+    );
+  } finally {
+    await sql.query('UPDATE materials SET purchase_price_vnd=NULL WHERE id=ANY($1::uuid[])', [
+      chosen,
+    ]);
+  }
+});
+
 test('Portfolio templates sync live sources and apply only explicitly configured valid recipes', async () => {
   const admin = await login(true);
   const customer = await login();

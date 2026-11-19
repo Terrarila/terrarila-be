@@ -61,13 +61,13 @@ async function describe(client: ImportClient, label: 'SOURCE' | 'TARGET') {
   const expected = [...tables, ...skipped, 'schema_migrations'].sort();
   if (JSON.stringify(names) !== JSON.stringify(expected))
     throw new ImportError(
-      `${label} public tables differ. Missing: ${expected.filter((name) => !names.includes(name)).join(', ') || 'none'}. Unexpected: ${names.filter((name) => !expected.includes(name)).join(', ') || 'none'}. Apply migrations through 020 to ${label} first.`,
+      `${label} public tables differ. Missing: ${expected.filter((name) => !names.includes(name)).join(', ') || 'none'}. Unexpected: ${names.filter((name) => !expected.includes(name)).join(', ') || 'none'}. Apply migrations through 021 to ${label} first.`,
     );
   const migrations = (
     await client.query('SELECT name,checksum FROM public.schema_migrations ORDER BY name')
   ).rows;
-  if (migrations.length !== 20 || migrations.at(-1)?.name !== '020_portfolio_recipes.sql')
-    throw new ImportError(`${label} must have migrations 001 through 020.`);
+  if (migrations.length !== 21 || migrations.at(-1)?.name !== '021_material_purchase_price.sql')
+    throw new ImportError(`${label} must have migrations 001 through 021.`);
   const columns = (
     await client.query<{
       table_name: string;
