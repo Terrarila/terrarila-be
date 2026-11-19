@@ -657,6 +657,144 @@ const orderInput = (quoteId: string) => ({
   fulfillment: 'pickup',
 });
 
+test('Portfolio templates sync live sources and apply only explicitly configured valid recipes', async () => {
+  const admin = await login(true);
+  const customer = await login();
+  for (const resource of ['products', 'portfolio']) {
+    const input = {
+      name: `Template ${resource}`,
+      slug: `template-${resource}`,
+      images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+      published: true,
+    };
+    const source = await request(server())
+      .post(`/v1/admin/${resource}`)
+      .auth(admin.token, { type: 'bearer' })
+      .send(input)
+      .expect(201);
+    const path = `/v1/admin/portfolio/${source.body.id}/recipe`;
+    const templates = () => request(server()).get('/v1/portfolio-templates?limit=100');
+    let entry = (await templates().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === source.body.id,
+    );
+    assert.equal(entry.selectable, false);
+    assert.equal(entry.configured, false);
+    await request(server()).get(path).expect(401);
+    await request(server()).get(path).auth(customer.token, { type: 'bearer' }).expect(403);
+    const initial = await request(server())
+      .get(path)
+      .auth(admin.token, { type: 'bearer' })
+      .expect(200);
+    assert.equal(initial.body.revision, 0);
+    const inputRecipe = { enabled: true, materialIds: [ids('glass')[0], ids('moss')[0]] };
+    const save = (revision?: string, body = inputRecipe) => {
+      const req = request(server()).patch(path).auth(admin.token, { type: 'bearer' });
+      if (revision !== undefined) req.set('If-Match', revision);
+      return req.send(body);
+    };
+    await save().expect(400);
+    await save('0', { ...inputRecipe, materialIds: [randomUUID()] }).expect(400);
+    const saved = await save('0').expect(200);
+    assert.equal(saved.body.revision, 1);
+    await save('0').expect(409);
+    entry = (await templates().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === source.body.id,
+    );
+    assert.equal(entry.selectable, true);
+    assert.equal(entry.materials.length, 2);
+    assert.equal(entry.name, input.name);
+    await request(server())
+      .patch(`/v1/admin/${resource}/${source.body.id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '1')
+      .send({ name: 'Updated source', images: [{ url: '/assets/updated.webp', alt: 'Updated' }] })
+      .expect(200);
+    entry = (await templates().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === source.body.id,
+    );
+    assert.equal(entry.name, 'Updated source');
+    assert.equal(entry.imageUrl, '/assets/updated.webp');
+    await save('1', { ...inputRecipe, enabled: false }).expect(200);
+    entry = (await templates().expect(200)).body.items.find(
+      (item: { id: string }) => item.id === source.body.id,
+    );
+    assert.equal(entry.selectable, false);
+    await request(server())
+      .delete(`/v1/admin/${resource}/${source.body.id}`)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', '2')
+      .expect(200);
+    assert.equal(
+      (
+        await sql.query(
+          'SELECT id FROM design_presets WHERE source_product_id=$1 OR source_portfolio_id=$1',
+          [source.body.id],
+        )
+      ).rows.length,
+      0,
+    );
+  }
+});
+
+test('Portfolio recipes enforce glass sizes and selection limits, and unavailable materials disable the whole template', async () => {
+  const admin = await login(true);
+  const source = await request(server())
+    .post('/v1/admin/products')
+    .auth(admin.token, { type: 'bearer' })
+    .send({
+      name: 'Validated template',
+      slug: 'validated-template',
+      published: true,
+      images: [{ url: '/assets/fixture.webp', alt: 'Fixture' }],
+    })
+    .expect(201);
+  const path = `/v1/admin/portfolio/${source.body.id}/recipe`;
+  const save = (materialIds: string[], revision: string) =>
+    request(server())
+      .patch(path)
+      .auth(admin.token, { type: 'bearer' })
+      .set('If-Match', revision)
+      .send({ enabled: true, materialIds });
+  const shape = members.find(
+    (item) => item.category === 'glass' && item.parentMaterialId === null,
+  )!;
+  await save([shape.id], '0').expect(422);
+  await save([ids('glass')[0]!, ...ids('moss').slice(0, 4)], '0').expect(422);
+  await save([ids('glass')[0]!, ids('glass')[0]!], '0').expect(400);
+  assert.equal(
+    (await sql.query('SELECT id FROM design_presets WHERE source_product_id=$1', [source.body.id]))
+      .rows.length,
+    0,
+  );
+  await save([ids('glass')[0]!, ids('moss')[0]!], '0').expect(200);
+  const read = async () =>
+    (await request(server()).get('/v1/portfolio-templates?limit=100').expect(200)).body.items.find(
+      (item: { id: string }) => item.id === source.body.id,
+    );
+  await sql.query("UPDATE materials SET availability='unavailable' WHERE id=$1", [ids('moss')[0]]);
+  assert.equal((await read()).selectable, false);
+  await sql.query("UPDATE materials SET availability='available' WHERE id=$1", [ids('moss')[0]]);
+  await request(server())
+    .patch(`/v1/admin/products/${source.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '1')
+    .send({ showInPortfolio: false })
+    .expect(200);
+  assert.equal(await read(), undefined);
+  const audit = (
+    await sql.query(
+      "SELECT changes FROM admin_audit_log WHERE action='portfolio.recipe_updated' AND entity_id=$1",
+      [source.body.id],
+    )
+  ).rows;
+  assert.equal(audit.length, 1);
+  await request(server())
+    .delete(`/v1/admin/products/${source.body.id}`)
+    .auth(admin.token, { type: 'bearer' })
+    .set('If-Match', '2')
+    .expect(200);
+});
+
 test('public catalog reflects FE assets/rules, leaves unknown prices null and hides draft products', async () => {
   const categories = await request(server()).get('/v1/material-categories').expect(200);
   assert.equal(categories.body.find((c: { code: string }) => c.code === 'moss').maxSelections, 3);

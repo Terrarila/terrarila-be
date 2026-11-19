@@ -38,6 +38,8 @@ import {
   PublicPricingController,
 } from './orders/orders.controller.js';
 import { OrdersService } from './orders/orders.service.js';
+import { PortfolioRecipesController } from './admin/portfolio-recipes.controller.js';
+import { PortfolioRecipesService } from './catalog/portfolio-recipes.service.js';
 import { MailgunMailer, NOTIFICATION_MAILER } from './notifications/mailgun.js';
 import { NotificationsService } from './notifications/notifications.service.js';
 import { NotificationsController } from './notifications/notifications.controller.js';
@@ -47,6 +49,7 @@ import type { AppConfig } from './common/config.js';
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    PortfolioRecipesController,
     NotificationsController,
     FeedbackController,
     AdminFeedbackController,
@@ -67,6 +70,7 @@ import type { AppConfig } from './common/config.js';
     PublicPricingController,
   ],
   providers: [
+    PortfolioRecipesService,
     NotificationsService,
     { provide: NOTIFICATION_MAILER, useClass: MailgunMailer },
     PublicRateLimit,

@@ -1,5 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
+import type { SqlClient } from '../database/database.service.js';
 import { decodeCursor, pageResult } from '../common/pagination.js';
 import type { PageQuery } from '../common/pagination.js';
 import type { MaterialsQuery } from './catalog.dto.js';
@@ -32,6 +33,17 @@ export type CategoryRow = {
   maxSelections: number | null;
   sortOrder: number;
 };
+export type PresetRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  isDemo: boolean;
+  sortOrder: number;
+  materialIds: string[];
+  enabled?: boolean;
+};
 const materialColumns = `m.id,m.legacy_id AS "legacyId",m.slug,c.code AS category,m.name,m.description,
   m.image_url AS "imageUrl",m.price_vnd AS "priceVnd",m.unit,m.availability,m.published,m.sort_order AS "sortOrder",m.revision,
   m.parent_material_id AS "parentMaterialId",m.size_label AS "sizeLabel",
@@ -42,9 +54,9 @@ const materialColumns = `m.id,m.legacy_id AS "legacyId",m.slug,c.code AS categor
 @Injectable()
 export class CatalogRepository {
   constructor(@Inject(DatabaseService) private readonly db: DatabaseService) {}
-  async categories() {
+  async categories(client: SqlClient = this.db.client) {
     return (
-      await this.db.query<CategoryRow>(
+      await client.query<CategoryRow>(
         `SELECT code,name,description,selection_mode AS "selectionMode", min_selections AS "minSelections",max_selections AS "maxSelections",sort_order AS "sortOrder" FROM material_categories WHERE active ORDER BY sort_order,code`,
       )
     ).rows;
@@ -68,9 +80,9 @@ export class CatalogRepository {
     ).rows;
     return pageResult(rows, query.limit);
   }
-  async selectedMaterials(ids: string[]) {
+  async selectedMaterials(ids: string[], client: SqlClient = this.db.client) {
     return (
-      await this.db.query<MaterialRow>(
+      await client.query<MaterialRow>(
         `SELECT ${materialColumns} FROM materials m JOIN material_categories c ON c.id=m.category_id WHERE m.id=ANY($1::uuid[]) AND m.published AND c.active
         AND (m.parent_material_id IS NULL OR EXISTS(SELECT 1 FROM materials p WHERE p.id=m.parent_material_id AND p.published AND p.availability<>'unavailable')) ORDER BY c.sort_order,m.sort_order,m.id`,
         [ids],
@@ -121,9 +133,29 @@ export class CatalogRepository {
       }>(
         `SELECT p.id,p.slug,p.name,p.description,p.image_url AS "imageUrl",p.is_demo AS "isDemo",p.sort_order AS "sortOrder",
       ARRAY(SELECT material_id FROM design_preset_materials WHERE preset_id=p.id ORDER BY material_id) AS "materialIds"
-      FROM design_presets p WHERE p.published
+      FROM design_presets p WHERE p.published AND p.source_product_id IS NULL AND p.source_portfolio_id IS NULL
       AND ($1::int IS NULL OR (p.sort_order,p.id)>($1::int,$2::uuid))
       ORDER BY p.sort_order,p.id LIMIT $3`,
+        [cursor?.sortOrder ?? null, cursor?.id ?? null, query.limit + 1],
+      )
+    ).rows;
+    return pageResult(rows, query.limit);
+  }
+  async portfolioTemplates(query: PageQuery) {
+    const cursor = decodeCursor(query.cursor);
+    const rows = (
+      await this.db.query<PresetRow>(
+        `WITH sources AS (
+      SELECT id,slug,name,description,images,sort_order,'portfolio' AS kind FROM portfolio_entries WHERE published
+      UNION ALL
+      SELECT id,slug,name,description,images,sort_order,'product' AS kind FROM products WHERE published AND show_in_portfolio
+    ) SELECT s.id,s.slug,s.name,s.description,COALESCE(s.images->0->>'url','') AS "imageUrl",
+      false AS "isDemo",s.sort_order AS "sortOrder",COALESCE(p.published,false) AS enabled,
+      ARRAY(SELECT material_id FROM design_preset_materials WHERE preset_id=p.id ORDER BY material_id) AS "materialIds"
+      FROM sources s LEFT JOIN design_presets p ON
+        (s.kind='product' AND p.source_product_id=s.id) OR (s.kind='portfolio' AND p.source_portfolio_id=s.id)
+      WHERE ($1::int IS NULL OR (s.sort_order,s.id)>($1::int,$2::uuid))
+      ORDER BY s.sort_order,s.id LIMIT $3`,
         [cursor?.sortOrder ?? null, cursor?.id ?? null, query.limit + 1],
       )
     ).rows;
